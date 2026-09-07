@@ -32,7 +32,7 @@ import { Route as AdminLoginRouteImport } from './routes/admin.login'
 import { Route as AdminappAdminIndexRouteImport } from './routes/_adminapp/admin.index'
 import { Route as AdminappAdminProductsRouteImport } from './routes/_adminapp/admin.products'
 import { Route as SiteCollectionSlugRouteImport } from './routes/_site/collection.$slug'
-import { Route as SiteProductSlugRouteImport } from './routes/_site/product.$slug'
+import { Route as SiteProductsSlugRouteImport } from './routes/_site/products.$slug'
 import { Route as ApiPublicMediaSplatRouteImport } from './routes/api/public/media/$'
 
 const AdminappRoute = AdminappRouteImport.update({
@@ -148,9 +148,9 @@ const SiteCollectionSlugRoute = SiteCollectionSlugRouteImport.update({
   path: '/collection/$slug',
   getParentRoute: () => SiteRouteRoute,
 } as any)
-const SiteProductSlugRoute = SiteProductSlugRouteImport.update({
-  id: '/product/$slug',
-  path: '/product/$slug',
+const SiteProductsSlugRoute = SiteProductsSlugRouteImport.update({
+  id: '/products/$slug',
+  path: '/products/$slug',
   getParentRoute: () => SiteRouteRoute,
 } as any)
 const ApiPublicMediaSplatRoute = ApiPublicMediaSplatRouteImport.update({
@@ -180,7 +180,7 @@ export interface FileRoutesByFullPath {
   '/admin/login': typeof AdminLoginRoute
   '/admin/products': typeof AdminappAdminProductsRoute
   '/collection/$slug': typeof SiteCollectionSlugRoute
-  '/product/$slug': typeof SiteProductSlugRoute
+  '/products/$slug': typeof SiteProductsSlugRoute
   '/admin/': typeof AdminappAdminIndexRoute
   '/api/public/media/$': typeof ApiPublicMediaSplatRoute
 }
@@ -205,7 +205,7 @@ export interface FileRoutesByTo {
   '/admin/login': typeof AdminLoginRoute
   '/admin/products': typeof AdminappAdminProductsRoute
   '/collection/$slug': typeof SiteCollectionSlugRoute
-  '/product/$slug': typeof SiteProductSlugRoute
+  '/products/$slug': typeof SiteProductsSlugRoute
   '/admin': typeof AdminappAdminIndexRoute
   '/api/public/media/$': typeof ApiPublicMediaSplatRoute
 }
@@ -233,7 +233,7 @@ export interface FileRoutesById {
   '/_site/': typeof SiteIndexRoute
   '/_adminapp/admin/products': typeof AdminappAdminProductsRoute
   '/_site/collection/$slug': typeof SiteCollectionSlugRoute
-  '/_site/product/$slug': typeof SiteProductSlugRoute
+  '/_site/products/$slug': typeof SiteProductsSlugRoute
   '/_adminapp/admin/': typeof AdminappAdminIndexRoute
   '/api/public/media/$': typeof ApiPublicMediaSplatRoute
 }
@@ -260,7 +260,7 @@ export interface FileRouteTypes {
     | '/admin/login'
     | '/admin/products'
     | '/collection/$slug'
-    | '/product/$slug'
+    | '/products/$slug'
     | '/admin/'
     | '/api/public/media/$'
   fileRoutesByTo: FileRoutesByTo
@@ -285,7 +285,7 @@ export interface FileRouteTypes {
     | '/admin/login'
     | '/admin/products'
     | '/collection/$slug'
-    | '/product/$slug'
+    | '/products/$slug'
     | '/admin'
     | '/api/public/media/$'
   id:
@@ -312,7 +312,7 @@ export interface FileRouteTypes {
     | '/_site/'
     | '/_adminapp/admin/products'
     | '/_site/collection/$slug'
-    | '/_site/product/$slug'
+    | '/_site/products/$slug'
     | '/_adminapp/admin/'
     | '/api/public/media/$'
   fileRoutesById: FileRoutesById
@@ -487,11 +487,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SiteCollectionSlugRouteImport
       parentRoute: typeof SiteRouteRoute
     }
-    '/_site/product/$slug': {
-      id: '/_site/product/$slug'
-      path: '/product/$slug'
-      fullPath: '/product/$slug'
-      preLoaderRoute: typeof SiteProductSlugRouteImport
+    '/_site/products/$slug': {
+      id: '/_site/products/$slug'
+      path: '/products/$slug'
+      fullPath: '/products/$slug'
+      preLoaderRoute: typeof SiteProductsSlugRouteImport
       parentRoute: typeof SiteRouteRoute
     }
     '/api/public/media/$': {
@@ -523,7 +523,7 @@ interface SiteRouteRouteChildren {
   SiteWishlistRoute: typeof SiteWishlistRoute
   SiteIndexRoute: typeof SiteIndexRoute
   SiteCollectionSlugRoute: typeof SiteCollectionSlugRoute
-  SiteProductSlugRoute: typeof SiteProductSlugRoute
+  SiteProductsSlugRoute: typeof SiteProductsSlugRoute
 }
 
 const SiteRouteRouteChildren: SiteRouteRouteChildren = {
@@ -545,7 +545,7 @@ const SiteRouteRouteChildren: SiteRouteRouteChildren = {
   SiteWishlistRoute: SiteWishlistRoute,
   SiteIndexRoute: SiteIndexRoute,
   SiteCollectionSlugRoute: SiteCollectionSlugRoute,
-  SiteProductSlugRoute: SiteProductSlugRoute,
+  SiteProductsSlugRoute: SiteProductsSlugRoute,
 }
 
 const SiteRouteRouteWithChildren = SiteRouteRoute._addFileChildren(
