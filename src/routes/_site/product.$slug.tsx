@@ -12,7 +12,7 @@ import { directionsLink, formatINR, productEnquiryMessage, telLink, whatsappLink
 import { useWishlist } from "@/lib/wishlist";
 import { cn } from "@/lib/utils";
 
-export const Route = createFileRoute("/_site/product/$slug")({
+export const Route = createFileRoute("/_site/products/$slug")({
   loader: async ({ context, params }) => {
     const data = await context.queryClient.ensureQueryData(productQuery(params.slug));
     if (!data.product) throw notFound();
