@@ -29,7 +29,7 @@ import {
 } from "@/lib/admin.functions";
 
 import { PageHeader } from "@/components/admin/AdminShell";
-import { Card, Spinner } from "@/components/admin/ui";
+import { Card, Spinner, UploadButton } from "@/components/admin/ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatINR, formatDate } from "@/lib/format";
@@ -757,6 +757,12 @@ function ProductForm({
     seo_description: "",
 
     collectionIds: [] as string[],
+
+    images: [] as Array<{
+      url: string;
+      path: string;
+      name: string;
+    }>,
   });
 
   function update(
@@ -907,7 +913,12 @@ function ProductForm({
           collectionIds:
             form.collectionIds,
 
-          images: [],
+          images: form.images.map((image, index) => ({
+            url: image.url,
+            storage_path: image.path,
+            alt: image.name,
+            sort_order: index,
+          })),
         },
       });
 
@@ -1052,6 +1063,111 @@ function ProductForm({
                 placeholder="Describe this jewellery product..."
               />
             </Field>
+          </FormSection>
+
+          {/* Product Images */}
+          <FormSection
+            title="Product Images"
+            description="Upload 2–10 high-quality product photos. The first image will be used as the main product image."
+          >
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium">
+                    Jewellery Photos
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Recommended: front, side, 45° and top views.
+                  </p>
+                </div>
+
+                <UploadButton
+                  kind="product"
+                  multiple
+                  accept="image/jpeg,image/png,image/webp"
+                  label="Upload Images"
+                  onUploaded={(files) => {
+                    setForm((current) => ({
+                      ...current,
+                      images: [
+                        ...current.images,
+                        ...files.map((file) => ({
+                          url: file.url,
+                          path: file.path,
+                          name: file.name,
+                        })),
+                      ].slice(0, 10),
+                    }));
+                  }}
+                />
+              </div>
+
+              {form.images.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border p-8 text-center">
+                  <p className="text-sm font-medium">
+                    No product images added
+                  </p>
+
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Upload product photos to display them on the product page.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-5">
+                  {form.images.map((image, index) => (
+                    <div
+                      key={`${image.path}-${index}`}
+                      className="group relative overflow-hidden rounded-lg border border-border bg-muted"
+                    >
+                      <div className="aspect-square">
+                        <img
+                          src={image.url}
+                          alt={image.name}
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+
+                      {index === 0 && (
+                        <span className="absolute left-2 top-2 rounded-full bg-background/90 px-2 py-1 text-[10px] font-medium">
+                          Main
+                        </span>
+                      )}
+
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={() => {
+                          setForm((current) => ({
+                            ...current,
+                            images: current.images.filter(
+                              (_, imageIndex) => imageIndex !== index,
+                            ),
+                          }));
+                        }}
+                        className="absolute right-2 top-2 rounded-full bg-background/90 p-1.5 text-destructive shadow-sm hover:bg-background"
+                        aria-label={`Remove ${image.name}`}
+                        title="Remove image"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+
+                      <div className="border-t border-border bg-background/90 px-2 py-1.5">
+                        <p className="truncate text-[10px] text-muted-foreground">
+                          {index + 1}. {image.name}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {form.images.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {form.images.length}/10 images added. The first image is the
+                  main product image.
+                </p>
+              )}
+            </div>
           </FormSection>
 
           {/* Pricing */}
