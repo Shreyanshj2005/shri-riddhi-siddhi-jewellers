@@ -73,7 +73,7 @@ export function QuickViewDialog({ product, onOpenChange }: { product: ProductCar
                 </Button>
                 <div className="grid grid-cols-2 gap-2">
                   <Button asChild variant="luxe" size="lg">
-                    <Link to="/product/$slug" params={{ slug: product.slug }} onClick={() => onOpenChange(false)}>
+                    <Link to="/products/$slug" params={{ slug: product.slug }} onClick={() => onOpenChange(false)}>
                       View Details
                     </Link>
                   </Button>

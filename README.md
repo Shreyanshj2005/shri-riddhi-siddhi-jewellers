@@ -1251,7 +1251,7 @@ Product links must be unique.
 
 Example:
 
-/product/diamond-solitaire-ring-name
+/products/diamond-solitaire-ring-name
 
 40. SHOWROOM INFORMATION
 
@@ -1777,7 +1777,7 @@ PRODUCT LISTING
 
 /gifts
 
-/product/[slug]
+/products/[slug]
 
 /contact
 

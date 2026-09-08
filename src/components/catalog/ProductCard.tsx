@@ -21,7 +21,7 @@ export function ProductCard({ product, onQuickView, priority }: { product: Produ
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      <Link to="/product/$slug" params={{ slug: product.slug }} className="relative block aspect-square overflow-hidden bg-muted" aria-label={product.name}>
+      <Link to="/products/$slug" params={{ slug: product.slug }} className="relative block aspect-square overflow-hidden bg-muted" aria-label={product.name}>
         {img ? (
           <>
             <img
@@ -85,7 +85,7 @@ export function ProductCard({ product, onQuickView, priority }: { product: Produ
           {product.purity ? ` ${product.purity}` : ""}
         </p>
         <h3 className="mt-1.5 font-serif text-[1.05rem] leading-snug">
-          <Link to="/product/$slug" params={{ slug: product.slug }} className="hover:text-gold transition-colors">
+          <Link to="/products/$slug" params={{ slug: product.slug }} className="hover:text-gold transition-colors">
             {product.name}
           </Link>
         </h3>
@@ -96,7 +96,7 @@ export function ProductCard({ product, onQuickView, priority }: { product: Produ
           )}
         </div>
         <div className="mt-3 flex items-center gap-2 text-[0.65rem] uppercase tracking-[0.2em]">
-          <Link to="/product/$slug" params={{ slug: product.slug }} className="border-b border-foreground/60 pb-0.5 hover:border-gold hover:text-gold transition-colors">
+          <Link to="/products/$slug" params={{ slug: product.slug }} className="border-b border-foreground/60 pb-0.5 hover:border-gold hover:text-gold transition-colors">
             View Details
           </Link>
           {onQuickView && (

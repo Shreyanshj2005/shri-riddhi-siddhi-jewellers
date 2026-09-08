@@ -81,7 +81,7 @@ export function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                     type="button"
                     onClick={() => {
                       onOpenChange(false);
-                      navigate({ to: "/product/$slug", params: { slug: p.slug } });
+                      navigate({ to: "/products/$slug", params: { slug: p.slug } });
                     }}
                     className="flex w-full items-center gap-4 rounded-sm p-2 text-left hover:bg-muted transition-colors"
                   >
