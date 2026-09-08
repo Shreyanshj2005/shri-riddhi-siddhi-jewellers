@@ -78,14 +78,17 @@ export const adminListProducts = createServerFn({ method: "POST" })
     const page = data.page ?? 1;
     let q = context.supabase
       .from("products")
-      .select("id,name,slug,sku,price,original_price,discount_pct,status,stock_status,featured,best_seller,is_new,updated_at,deleted_at,category:categories!products_category_id_fkey(name),images:product_images(url,sort_order)", { count: "exact" })
+      .select("id,name,slug,sku,price,original_price,offer_label,status,stock_status,featured,best_seller,is_new,updated_at,deleted_at,category:categories!products_category_id_fkey(name),images:product_images(url,sort_order)", { count: "exact" })
       .order("updated_at", { ascending: false })
       .range((page - 1) * size, page * size - 1);
     q = data.trash ? q.not("deleted_at", "is", null) : q.is("deleted_at", null);
     if (data.q) q = q.ilike("search_text", `%${data.q.toLowerCase()}%`);
     if (data.status) q = q.eq("status", data.status);
     if (data.category) q = q.eq("category_id", data.category);
-    const { data: rows, count } = await q;
+    const { data: rows, count, error } = await q;
+    if (error) {
+      throw new Error(`Unable to load products: ${error.message}`);
+    }
     return { items: rows ?? [], total: count ?? 0, page, pageSize: size };
   });
 
@@ -204,7 +207,7 @@ export const adminProductAction = createServerFn({ method: "POST" })
         const { data: p } = await sb.from("products").select("*").eq("id", id).single();
         const { data: imgs } = await sb.from("product_images").select("url,storage_path,alt,sort_order").eq("product_id", id);
         const { data: cols } = await sb.from("product_collections").select("collection_id").eq("product_id", id);
-        const { id: _oldId, created_at: _c, updated_at: _u, discount_pct: _d, search_text: _s, ...rest } = p as Record<string, unknown> & { id: string };
+        const { id: _oldId, created_at: _c, updated_at: _u, search_text: _s, ...rest } = p as Record<string, unknown> & { id: string };
         const suffix = Date.now().toString(36).slice(-4);
         const { data: created, error } = await sb.from("products").insert({ ...(rest as never), name: `${p!.name} (Copy)`, slug: `${p!.slug}-copy-${suffix}`, sku: p!.sku ? `${p!.sku}-C${suffix}` : null, status: "draft" }).select("id").single();
         if (error) throw new Error(error.message);
