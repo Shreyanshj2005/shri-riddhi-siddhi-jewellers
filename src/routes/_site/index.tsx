@@ -6,6 +6,8 @@ import { HeroVideo } from "@/components/site/HeroVideo";
 import { ProductGrid } from "@/components/catalog/ProductGrid";
 import { ImageTile, RateStrip, ReviewCard, SectionHeading, ViewAllLink, WhyUs } from "@/components/site/Sections";
 import { ShowroomBlock } from "@/components/site/ShowroomBlock";
+import { OffersCarousel } from "@/components/site/OffersCarousel";
+import { OfferBenefits, GoldInvestmentPlan } from "@/components/site/OfferBenefits";
 import { Button } from "@/components/ui/button";
 import { PRICE_RANGES } from "@/lib/filters";
 import { DIAMOND_TYPE_CARDS, SITE_NAME } from "@/lib/site";
@@ -93,6 +95,12 @@ function HomePage() {
     <>
       {vis("hero") && <HeroVideo hero={hero} />}
       {data?.rates && <RateStrip rates={data.rates} />}
+
+      <OffersCarousel offers={data?.offers} />
+
+      <OfferBenefits />
+
+      <GoldInvestmentPlan />
 
       {/* Diamond intro */}
       {vis("diamond_intro") && (
@@ -231,7 +239,7 @@ function HomePage() {
             <ImageTile img="/images/seed/banner-gold.jpg" title={sec("gold", "Gold Jewellery").title} subtitle="22K · 18K · BIS Hallmarked" to="/gold-jewellery" className="lg:col-span-7" aspect="aspect-[4/3] lg:aspect-auto lg:min-h-[520px]" />
             <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:col-span-5">
               {(data?.gold ?? []).slice(0, 4).map((p) => (
-                <Link key={p.id} to="/products/$slug" params={{ slug: p.slug }} className="group">
+                <Link key={p.id} to="/product/$slug" params={{ slug: p.slug }} className="group">
                   <div className="aspect-square overflow-hidden bg-muted"><img src={p.images[0]?.url} alt={p.name} loading="lazy" width={400} height={400} className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" /></div>
                   <p className="mt-2 truncate font-serif text-base">{p.name}</p>
                   <p className="text-xs text-muted-foreground">₹{new Intl.NumberFormat("en-IN").format(p.price)}</p>

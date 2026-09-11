@@ -36,10 +36,11 @@ export const getSiteChrome = createServerFn({ method: "GET" }).handler(async () 
 
 export const getHomeData = createServerFn({ method: "GET" }).handler(async () => {
   const sb = publicClient();
-  const [sections, rates, reviews, diamondFav, solitaire, bestDiamonds, gold, gems, gifts, newArrivals, categories, collections] =
+  const [sections, rates, reviews, offers, diamondFav, solitaire, bestDiamonds, gold, gems, gifts, newArrivals, categories, collections] =
     await Promise.all([
       sb.from("homepage_sections").select("*").order("sort_order").then((r) => r.data ?? []),
       sb.from("rates").select("*").order("sort_order").then((r) => r.data ?? []),
+      sb.from("offers").select("*").eq("is_active", true).order("sort_order").then((r) => r.data ?? []),
       sb.from("reviews").select("*").eq("is_visible", true).order("is_featured", { ascending: false }).order("sort_order").limit(6).then((r) => r.data ?? []),
       fetchCollectionProducts("diamond-favourites", 8),
       fetchCollectionProducts("solitaire-collection", 4),
@@ -59,7 +60,7 @@ export const getHomeData = createServerFn({ method: "GET" }).handler(async () =>
       fetchCategories(),
       fetchCollections(),
     ]);
-  return { sections, rates, reviews, diamondFav, solitaire, bestDiamonds, gold, gems, gifts, newArrivals, categories, collections };
+  return { sections, rates, reviews, offers, diamondFav, solitaire, bestDiamonds, gold, gems, gifts, newArrivals, categories, collections };
 });
 
 export const getRates = createServerFn({ method: "GET" }).handler(async () => {

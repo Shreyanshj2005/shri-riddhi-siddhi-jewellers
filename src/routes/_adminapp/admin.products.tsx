@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Search,
   Plus,
@@ -18,6 +18,7 @@ import {
   ChevronRight,
   X,
   Save,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -25,6 +26,7 @@ import {
   adminListProducts,
   adminProductAction,
   adminSaveProduct,
+  adminGetProduct,
   adminGetLookups,
 } from "@/lib/admin.functions";
 
@@ -58,6 +60,7 @@ function ProductsPage() {
   const [page, setPage] = useState(1);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [editProductId, setEditProductId] = useState<string | null>(null);
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["admin-products", search, status, trash, page],
@@ -451,6 +454,17 @@ function ProductsPage() {
                         <div className="flex justify-end gap-1">
                           {!trash ? (
                             <>
+                              <ActionButton
+                                title="Edit Product"
+                                disabled={busy}
+                                onClick={() => {
+                                  setEditProductId(product.id);
+                                  setShowForm(true);
+                                }}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </ActionButton>
+
                               {product.status !== "published" && (
                                 <ActionButton
                                   title="Publish"
@@ -669,11 +683,16 @@ function ProductsPage() {
       {/* Add Product Modal */}
       {showForm && (
         <ProductForm
+          productId={editProductId}
           categories={lookups?.categories ?? []}
           collections={lookups?.collections ?? []}
-          onClose={() => setShowForm(false)}
+          onClose={() => {
+            setShowForm(false);
+            setEditProductId(null);
+          }}
           onSaved={async () => {
             setShowForm(false);
+            setEditProductId(null);
 
             await queryClient.invalidateQueries({
               queryKey: ["admin-products"],
@@ -694,11 +713,13 @@ function ProductsPage() {
 ========================================================= */
 
 function ProductForm({
+  productId,
   categories,
   collections,
   onClose,
   onSaved,
 }: {
+  productId: string | null;
   categories: Array<{
     id: string;
     name: string;
@@ -713,6 +734,12 @@ function ProductForm({
   onSaved: () => Promise<void> | void;
 }) {
   const [saving, setSaving] = useState(false);
+
+  const { data: existingProduct, isLoading: loadingProduct, error: productError } = useQuery({
+    queryKey: ["admin-product", productId],
+    queryFn: () => adminGetProduct({ data: { id: productId! } }),
+    enabled: Boolean(productId),
+  });
 
   const [form, setForm] = useState({
     name: "",
@@ -759,11 +786,63 @@ function ProductForm({
     collectionIds: [] as string[],
 
     images: [] as Array<{
+      id?: string;
       url: string;
       path: string;
       name: string;
     }>,
   });
+
+  useEffect(() => {
+    if (!existingProduct?.product) return;
+
+    const p = existingProduct.product as any;
+
+    setForm({
+      name: p.name ?? "",
+      slug: p.slug ?? "",
+      sku: p.sku ?? "",
+      category_id: p.category_id ?? "",
+      subcategory_id: p.subcategory_id ?? "",
+      price: p.price != null ? String(p.price) : "",
+      original_price: p.original_price != null ? String(p.original_price) : "",
+      offer_label: p.offer_label ?? "",
+      metal: p.metal ?? "",
+      purity: p.purity ?? "",
+      gender: p.gender ?? "",
+      stone: p.stone ?? "",
+      occasions: Array.isArray(p.occasions) ? p.occasions.join(", ") : "",
+      style: p.style ?? "",
+      diamond_type: p.diamond_type ?? "",
+      diamond_shape: p.diamond_shape ?? "",
+      diamond_carat: p.diamond_carat != null ? String(p.diamond_carat) : "",
+      diamond_colour: p.diamond_colour ?? "",
+      diamond_clarity: p.diamond_clarity ?? "",
+      cut: p.cut ?? "",
+      certification: p.certification ?? "",
+      num_stones: p.num_stones ?? "",
+      total_diamond_weight: p.total_diamond_weight != null ? String(p.total_diamond_weight) : "",
+      product_weight: p.product_weight != null ? String(p.product_weight) : "",
+      description: p.description ?? "",
+      tags: Array.isArray(p.tags) ? p.tags.join(", ") : "",
+      featured: Boolean(p.featured),
+      best_seller: Boolean(p.best_seller),
+      is_new: Boolean(p.is_new),
+      status: p.status ?? "draft",
+      stock_status: p.stock_status ?? "in_stock",
+      seo_title: p.seo_title ?? "",
+      seo_description: p.seo_description ?? "",
+      collectionIds: existingProduct.collectionIds ?? [],
+      images: Array.isArray(p.images)
+        ? p.images.map((image: any, index: number) => ({
+            id: image.id,
+            url: image.url,
+            path: image.storage_path ?? "",
+            name: image.alt || `Image ${index + 1}`,
+          }))
+        : [],
+    });
+  }, [existingProduct]);
 
   function update(
     field: keyof typeof form,
@@ -813,6 +892,7 @@ function ProductForm({
     try {
       await adminSaveProduct({
         data: {
+          id: productId || undefined,
           name: form.name.trim(),
           slug,
           sku: form.sku.trim() || null,
@@ -914,15 +994,16 @@ function ProductForm({
             form.collectionIds,
 
           images: form.images.map((image, index) => ({
+            id: image.id,
             url: image.url,
-            storage_path: image.path,
-            alt: image.name,
+            storage_path: image.path || null,
+            alt: image.name || null,
             sort_order: index,
           })),
         },
       });
 
-      toast.success("Product created successfully");
+      toast.success(productId ? "Product updated successfully" : "Product created successfully");
 
       await onSaved();
     } catch (err) {
@@ -951,6 +1032,33 @@ function ProductForm({
     });
   }
 
+  if (productId && loadingProduct) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <Card className="w-full max-w-md p-8 text-center">
+          <Spinner />
+          <p className="mt-4 text-sm text-muted-foreground">Loading product...</p>
+        </Card>
+      </div>
+    );
+  }
+
+  if (productId && productError) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <Card className="w-full max-w-md p-8">
+          <p className="font-medium text-destructive">Unable to load product</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {productError instanceof Error ? productError.message : "Something went wrong."}
+          </p>
+          <div className="mt-5 flex justify-end">
+            <Button variant="outline" onClick={onClose}>Close</Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-4">
       <div className="mx-auto my-6 max-w-5xl rounded-xl border border-border bg-background shadow-2xl">
@@ -958,11 +1066,13 @@ function ProductForm({
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background px-6 py-4">
           <div>
             <h2 className="font-display text-xl font-semibold">
-              Add New Product
+              {productId ? "Edit Product" : "Add New Product"}
             </h2>
 
             <p className="mt-1 text-sm text-muted-foreground">
-              Add a jewellery product to your catalogue.
+              {productId
+                ? "Update product details, pricing and images."
+                : "Add a jewellery product to your catalogue."}
             </p>
           </div>
 
@@ -1692,7 +1802,7 @@ function ProductForm({
             ) : (
               <>
                 <Save className="mr-2 h-4 w-4" />
-                Save Product
+                {productId ? "Update Product" : "Save Product"}
               </>
             )}
           </Button>
