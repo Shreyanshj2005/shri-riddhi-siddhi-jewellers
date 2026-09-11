@@ -1,215 +1,709 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronRight, Copy, Heart, MapPin, MessageCircle, Phone, Share2, Star } from "lucide-react";
-import { toast } from "sonner";
-import { chromeQuery, productQuery } from "@/lib/catalog.functions";
-import { ProductGallery } from "@/components/catalog/ProductGallery";
-import { ProductGrid } from "@/components/catalog/ProductGrid";
-import { SectionHeading } from "@/components/site/Sections";
+import {
+  Check,
+  ChevronRight,
+  Copy,
+  Heart,
+  MapPin,
+  MessageCircle,
+  Phone,
+  Share2,
+  ShoppingBag,
+  Star,
+} from "lucide-react";
+import {
+  Link,
+  notFound,
+  createFileRoute,
+} from "@tanstack/react-router";
+import { useState } from "react";
+
 import { Button } from "@/components/ui/button";
-import { DEFAULT_CONTACT, getSetting, type ContactSettings, type MapSettings, type ProductFull } from "@/lib/types";
-import { directionsLink, formatINR, productEnquiryMessage, telLink, whatsappLink } from "@/lib/format";
+import { toast } from "sonner";
 import { useWishlist } from "@/lib/wishlist";
-import { cn } from "@/lib/utils";
+import { useCart } from "@/context/CartContext";
+import { productQuery } from "@/lib/catalog.functions";
 
 export const Route = createFileRoute("/_site/products/$slug")({
   loader: async ({ context, params }) => {
-    const data = await context.queryClient.ensureQueryData(productQuery(params.slug));
-    if (!data.product) throw notFound();
-    return { product: data.product };
-  },
-  head: ({ loaderData }) => {
-    const p = loaderData?.product;
-    if (!p) return { meta: [{ title: "Product unavailable | Shri Riddhi Siddhi Jewellers" }, { name: "robots", content: "noindex" }] };
-    const title = p.seo_title || `${p.name} | ${p.category?.name ?? "Jewellery"} | Shri Riddhi Siddhi Jewellers`;
-    const desc = p.seo_description || `${p.name} — ${[p.metal, p.purity, p.diamond_type, p.diamond_carat ? `${p.diamond_carat} ct` : null].filter(Boolean).join(", ")}. ${formatINR(p.price)} at Shri Riddhi Siddhi Jewellers, Sultanpur.`;
+    const data = await context.queryClient.ensureQueryData(
+      productQuery(params.slug),
+    );
+
+    if (!data.product) {
+      throw notFound();
+    }
+
     return {
-      meta: [
-        { title },
-        { name: "description", content: desc },
-        { property: "og:title", content: title },
-        { property: "og:description", content: desc },
-        { property: "og:type", content: "product" },
-      ],
-      scripts: [
-        {
-          type: "application/ld+json",
-          children: JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "Product",
-            name: p.name,
-            sku: p.sku ?? undefined,
-            description: p.description ?? desc,
-            image: p.images.map((i) => i.url),
-            brand: { "@type": "Brand", name: "Shri Riddhi Siddhi Jewellers" },
-            material: p.metal ?? undefined,
-            offers: { "@type": "Offer", priceCurrency: "INR", price: p.price, availability: p.stock_status === "out_of_stock" ? "https://schema.org/OutOfStock" : "https://schema.org/InStock" },
-          }),
-        },
-      ],
+      product: data.product,
     };
   },
-  notFoundComponent: () => (
-    <div className="container-luxe py-32 text-center">
-      <p className="eyebrow">Not found</p>
-      <h1 className="mt-4 font-serif text-4xl">This design is no longer available</h1>
-      <Button asChild variant="luxe" className="mt-8"><Link to="/jewellery">Browse the collection</Link></Button>
-    </div>
-  ),
+
   component: ProductPage,
 });
 
 function ProductPage() {
   const { slug } = Route.useParams();
-  const { data } = useQuery(productQuery(slug));
-  const { data: chrome } = useQuery(chromeQuery);
-  const contact = getSetting<ContactSettings>(chrome?.settings, "contact", DEFAULT_CONTACT);
-  const map = getSetting<MapSettings>(chrome?.settings, "map", { query: `${contact.address_line1}, ${contact.address_line2}`, embed_url: "" });
-  const { has, toggle } = useWishlist();
-  const product = data?.product;
-  if (!product) return null;
-  return <ProductView product={product} related={data.related} contact={contact} mapQuery={map.query} wished={has(product.id)} onWish={() => toggle(product.id)} />;
-}
-
-export function ProductView({
-  product: p, related, contact, mapQuery, wished, onWish, preview,
-}: { product: ProductFull; related?: ProductFull[] | import("@/lib/types").ProductCard[]; contact: ContactSettings; mapQuery: string; wished: boolean; onWish: () => void; preview?: boolean }) {
-  const url = typeof window !== "undefined" ? window.location.href : "";
-  const wa = whatsappLink(contact.whatsapp, productEnquiryMessage(p, url));
-
-  const share = async () => {
-    if (navigator.share) {
-      try { await navigator.share({ title: p.name, text: `${p.name} – ${formatINR(p.price)}`, url }); } catch { /* cancelled */ }
-    } else {
-      await navigator.clipboard.writeText(url);
-      toast.success("Link copied");
-    }
-  };
-  const copy = async () => { await navigator.clipboard.writeText(url); toast.success("Link copied"); };
-
-  const stock = p.stock_status === "in_stock" ? "In Stock" : p.stock_status === "made_to_order" ? "Made To Order" : "Out Of Stock";
-  const isDiamond = !!p.diamond_type || !!p.diamond_carat || !!p.diamond_shape;
-
-  const details: [string, string | null | undefined][] = [
-    ["Metal", p.metal],
-    ["Gold Purity", p.purity],
-    ["Gender", p.gender],
-    ["Stone", p.stone],
-    ["Style", p.style],
-    ["Occasion", p.occasions?.length ? p.occasions.join(", ") : null],
-    ["Product Weight", p.product_weight ? `${p.product_weight} g` : null],
-    ["Certification", p.certification],
-  ];
-  const diamond: [string, string | null | undefined][] = [
-    ["Diamond Type", p.diamond_type],
-    ["Diamond Shape", p.diamond_shape],
-    ["Diamond Carat", p.diamond_carat ? `${p.diamond_carat} ct` : null],
-    ["Diamond Colour", p.diamond_colour],
-    ["Diamond Clarity", p.diamond_clarity],
-    ["Cut", p.cut],
-    ["Number Of Diamonds", p.num_stones],
-    ["Total Diamond Weight", p.total_diamond_weight ? `${p.total_diamond_weight} ct` : null],
-  ];
+  const { product } = Route.useLoaderData();
 
   return (
-    <div className="container-luxe py-6 lg:py-10">
-      <nav aria-label="Breadcrumb" className="mb-6 flex flex-wrap items-center gap-1.5 text-[0.62rem] uppercase tracking-[0.22em] text-muted-foreground">
-        <Link to="/" className="hover:text-foreground">Home</Link>
-        <ChevronRight className="h-3 w-3" />
-        <Link to="/jewellery" className="hover:text-foreground">Jewellery</Link>
-        {p.category && (<><ChevronRight className="h-3 w-3" /><Link to="/jewellery" search={{ cat: p.category.slug }} className="hover:text-foreground">{p.category.name}</Link></>)}
-        {p.subcategory && (<><ChevronRight className="h-3 w-3" /><Link to="/jewellery" search={{ type: p.subcategory.slug }} className="hover:text-foreground">{p.subcategory.name}</Link></>)}
-        <ChevronRight className="h-3 w-3" /><span className="text-foreground">{p.name}</span>
-      </nav>
-
-      <div className="grid gap-10 lg:grid-cols-12 lg:gap-14">
-        <div className="lg:col-span-7">
-          <ProductGallery images={p.images} name={p.name} />
-        </div>
-
-        <div className="lg:col-span-5">
-          <p className="eyebrow">{p.subcategory?.name ?? p.category?.name}</p>
-          <h1 className="mt-2 font-serif text-3xl leading-tight sm:text-4xl">{p.name}</h1>
-          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            {p.sku && <span>SKU {p.sku}</span>}
-            <span className="flex items-center gap-1 text-gold"><Star className="h-3.5 w-3.5 fill-current" />{Number(p.rating).toFixed(1)}</span>
-            <span className={cn("font-medium", p.stock_status === "out_of_stock" ? "text-destructive" : "text-success")}>{stock}</span>
-          </div>
-
-          <div className="mt-6 flex flex-wrap items-baseline gap-3">
-            <span className="text-3xl font-medium tracking-wide">{formatINR(p.price)}</span>
-            {p.original_price && p.original_price > p.price && (
-              <>
-                <span className="text-base text-muted-foreground line-through">{formatINR(p.original_price)}</span>
-                <span className="bg-gold px-2 py-0.5 text-[0.65rem] font-medium uppercase tracking-[0.18em] text-gold-foreground">{p.discount_pct}% OFF</span>
-              </>
-            )}
-          </div>
-          {p.offer_label && <p className="mt-2 text-xs uppercase tracking-[0.2em] text-gold">{p.offer_label}</p>}
-          <p className="mt-1 text-xs text-muted-foreground">Inclusive of all taxes. Final price confirmed at the showroom.</p>
-
-          <div className="mt-8 grid grid-cols-1 gap-2.5">
-            <Button asChild variant="whatsapp" size="xl" disabled={preview}>
-              <a href={wa} target="_blank" rel="noreferrer"><MessageCircle /> Enquire On WhatsApp</a>
-            </Button>
-            <div className="grid grid-cols-2 gap-2.5">
-              <Button asChild variant="luxe" size="lg"><a href={telLink(contact.phone)}><Phone /> Call Showroom</a></Button>
-              <Button asChild variant="outline-luxe" size="lg"><a href={directionsLink(mapQuery)} target="_blank" rel="noreferrer"><MapPin /> Visit Showroom</a></Button>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline-luxe" size="lg" className="flex-1" onClick={onWish} aria-pressed={wished}>
-                <Heart className={cn(wished && "fill-current text-destructive")} /> {wished ? "In Wishlist" : "Add To Wishlist"}
-              </Button>
-              <Button variant="outline" size="icon" className="h-12 w-12 rounded-none" onClick={share} aria-label="Share"><Share2 /></Button>
-              <Button variant="outline" size="icon" className="h-12 w-12 rounded-none" onClick={copy} aria-label="Copy link"><Copy /></Button>
-              <Button asChild variant="outline" size="icon" className="h-12 w-12 rounded-none" aria-label="Share on WhatsApp">
-                <a href={whatsappLink("", `${p.name} – ${formatINR(p.price)} ${url}`)} target="_blank" rel="noreferrer"><MessageCircle /></a>
-              </Button>
-            </div>
-          </div>
-
-          <ul className="mt-6 grid grid-cols-2 gap-2 text-[0.7rem] text-muted-foreground sm:grid-cols-3">
-            {["Certified Authenticity", "BIS Hallmarked Gold", "Lifetime Exchange", "Transparent Pricing", "Free Cleaning", "Showroom Try-On"].map((t) => (
-              <li key={t} className="flex items-center gap-1.5"><Check className="h-3 w-3 text-gold" />{t}</li>
-            ))}
-          </ul>
-
-          {p.description && (
-            <div className="mt-10 border-t border-border pt-8">
-              <p className="eyebrow mb-3">Description</p>
-              <p className="text-[0.95rem] leading-relaxed text-foreground/85">{p.description}</p>
-            </div>
-          )}
-
-          <Spec title="Product Details" rows={details} />
-          {isDiamond && <Spec title="Diamond Details" rows={diamond} />}
-        </div>
-      </div>
-
-      {related && related.length > 0 && !preview && (
-        <section className="mt-24">
-          <SectionHeading eyebrow="You may also like" title="Similar Designs" align="left" />
-          <ProductGrid products={related as import("@/lib/types").ProductCard[]} columns="home" />
-        </section>
-      )}
-    </div>
+    <ProductView
+      product={product}
+      slug={slug}
+    />
   );
 }
 
-function Spec({ title, rows }: { title: string; rows: [string, string | null | undefined][] }) {
-  const shown = rows.filter(([, v]) => v);
-  if (!shown.length) return null;
+function ProductView({
+  product: p,
+  slug,
+}: {
+  product: any;
+  slug: string;
+}) {
+  const { addToCart, isInCart } = useCart();
+
+  // IMPORTANT:
+  // useWishlist() returns:
+  // { ids, toggle, has, clear, count }
+  const { toggle, has } = useWishlist();
+
+  const [selectedImage, setSelectedImage] = useState(0);
+
+  const images = Array.isArray(p.images) ? p.images : [];
+
+  const currentImage =
+    images[selectedImage]?.url ??
+    images[0]?.url ??
+    "/images/placeholder-jewellery.jpg";
+
+  const alreadyInCart = isInCart(p.id);
+
+  // Check wishlist status using the actual hook function.
+  const wishlisted = has(p.id);
+
+  /*
+   * Calculate discount from original_price and current price.
+   * We do NOT use discount_pct because that column does not exist.
+   */
+  const discountPct =
+    p.original_price &&
+    Number(p.original_price) > Number(p.price)
+      ? Math.round(
+          ((Number(p.original_price) - Number(p.price)) /
+            Number(p.original_price)) *
+            100,
+        )
+      : 0;
+
+  const handleAddToCart = () => {
+    if (p.stock_status === "out_of_stock") {
+      toast.error("This product is currently out of stock.");
+      return;
+    }
+
+    addToCart({
+      id: p.id,
+      name: p.name,
+      slug: p.slug,
+      price: Number(p.price),
+      image: images[0]?.url ?? "",
+      metal: p.metal ?? "",
+      purity: p.purity ?? "",
+    });
+
+    toast.success("Added to cart", {
+      description: `${p.name} has been added to your cart.`,
+    });
+  };
+
+  const handleWishlist = () => {
+    const wasWishlisted = has(p.id);
+
+    toggle(p.id);
+
+    toast.success(
+      wasWishlisted
+        ? "Removed from wishlist"
+        : "Added to wishlist",
+    );
+  };
+
+  const handleShare = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: p.name,
+          text: `Check out ${p.name}`,
+          url: window.location.href,
+        });
+      } else {
+        await navigator.clipboard.writeText(
+          window.location.href,
+        );
+
+        toast.success("Product link copied");
+      }
+    } catch {
+      // User cancelled sharing.
+    }
+  };
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(
+        window.location.href,
+      );
+
+      toast.success("Product link copied");
+    } catch {
+      toast.error("Unable to copy product link");
+    }
+  };
+
+  const whatsappMessage = encodeURIComponent(
+    `Hello, I am interested in ${p.name}. Product link: ${window.location.href}`,
+  );
+
   return (
-    <div className="mt-10 border-t border-border pt-8">
-      <p className="eyebrow mb-4">{title}</p>
-      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-8">
-        {shown.map(([k, v]) => (
-          <div key={k} className="flex justify-between gap-4 border-b border-border/70 py-2.5 text-sm">
-            <dt className="text-muted-foreground">{k}</dt>
-            <dd className="text-right">{v}</dd>
+    <main className="min-h-screen bg-background">
+      {/* =========================================================
+          BREADCRUMB
+      ========================================================== */}
+      <div className="container mx-auto px-4 py-5">
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <Link
+            to="/"
+            className="transition-colors hover:text-foreground"
+          >
+            Home
+          </Link>
+
+          <ChevronRight className="h-4 w-4" />
+
+          <span>
+            {p.category?.name ?? "Jewellery"}
+          </span>
+
+          <ChevronRight className="h-4 w-4" />
+
+          <span className="text-foreground">
+            {p.name}
+          </span>
+        </div>
+      </div>
+
+      {/* =========================================================
+          PRODUCT SECTION
+      ========================================================== */}
+      <section className="container mx-auto px-4 pb-16">
+        <div className="grid gap-10 lg:grid-cols-2">
+          {/* =====================================================
+              PRODUCT IMAGES
+          ====================================================== */}
+          <div>
+            <div className="overflow-hidden rounded-2xl border bg-muted">
+              <img
+                src={currentImage}
+                alt={p.name}
+                className="aspect-square w-full object-cover"
+              />
+            </div>
+
+            {/* Thumbnails */}
+            {images.length > 1 && (
+              <div className="mt-4 grid grid-cols-5 gap-3">
+                {images.map(
+                  (image: any, index: number) => (
+                    <button
+                      key={image.id ?? index}
+                      type="button"
+                      onClick={() =>
+                        setSelectedImage(index)
+                      }
+                      aria-label={`View image ${
+                        index + 1
+                      }`}
+                      className={`overflow-hidden rounded-xl border-2 transition ${
+                        selectedImage === index
+                          ? "border-primary"
+                          : "border-transparent hover:border-border"
+                      }`}
+                    >
+                      <img
+                        src={image.url}
+                        alt={
+                          image.alt ??
+                          `${p.name} image ${index + 1}`
+                        }
+                        className="aspect-square w-full object-cover"
+                      />
+                    </button>
+                  ),
+                )}
+              </div>
+            )}
           </div>
-        ))}
-      </dl>
-    </div>
+
+          {/* =====================================================
+              PRODUCT INFORMATION
+          ====================================================== */}
+          <div className="flex flex-col">
+            {/* New badge */}
+            {p.is_new && (
+              <span className="mb-3 w-fit rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                NEW
+              </span>
+            )}
+
+            {/* Product name */}
+            <h1 className="font-serif text-3xl font-medium md:text-4xl">
+              {p.name}
+            </h1>
+
+            {/* SKU */}
+            {p.sku && (
+              <p className="mt-2 text-sm text-muted-foreground">
+                SKU: {p.sku}
+              </p>
+            )}
+
+            {/* =================================================
+                RATING
+            ================================================== */}
+            <div className="mt-4 flex items-center gap-2">
+              <div className="flex">
+                {Array.from({ length: 5 }).map(
+                  (_, index) => (
+                    <Star
+                      key={index}
+                      className="h-4 w-4 fill-current text-primary"
+                    />
+                  ),
+                )}
+              </div>
+
+              <span className="text-sm text-muted-foreground">
+                {p.rating ?? 5}
+              </span>
+            </div>
+
+            {/* =================================================
+                PRICE
+            ================================================== */}
+            <div className="mt-6">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-3xl font-semibold">
+                  ₹
+                  {Number(p.price).toLocaleString(
+                    "en-IN",
+                  )}
+                </span>
+
+                {p.original_price &&
+                  Number(p.original_price) >
+                    Number(p.price) && (
+                    <>
+                      <span className="text-lg text-muted-foreground line-through">
+                        ₹
+                        {Number(
+                          p.original_price,
+                        ).toLocaleString("en-IN")}
+                      </span>
+
+                      {discountPct > 0 && (
+                        <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-700">
+                          {discountPct}% OFF
+                        </span>
+                      )}
+                    </>
+                  )}
+              </div>
+
+              {p.offer_label && (
+                <p className="mt-2 text-sm font-medium text-primary">
+                  {p.offer_label}
+                </p>
+              )}
+            </div>
+
+            {/* =================================================
+                BASIC PRODUCT DETAILS
+            ================================================== */}
+            <div className="mt-8 grid grid-cols-2 gap-4 border-y py-6">
+              {p.metal && (
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Metal
+                  </p>
+
+                  <p className="mt-1 font-medium">
+                    {p.metal}
+                  </p>
+                </div>
+              )}
+
+              {p.purity && (
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Purity
+                  </p>
+
+                  <p className="mt-1 font-medium">
+                    {p.purity}
+                  </p>
+                </div>
+              )}
+
+              {p.stone && (
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Stone
+                  </p>
+
+                  <p className="mt-1 font-medium">
+                    {p.stone}
+                  </p>
+                </div>
+              )}
+
+              {p.product_weight && (
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Product Weight
+                  </p>
+
+                  <p className="mt-1 font-medium">
+                    {p.product_weight} g
+                  </p>
+                </div>
+              )}
+
+              {p.gender && (
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Gender
+                  </p>
+
+                  <p className="mt-1 font-medium">
+                    {p.gender}
+                  </p>
+                </div>
+              )}
+
+              {p.style && (
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Style
+                  </p>
+
+                  <p className="mt-1 font-medium">
+                    {p.style}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* =================================================
+                DIAMOND DETAILS
+            ================================================== */}
+            {(p.diamond_type ||
+              p.diamond_carat ||
+              p.diamond_shape ||
+              p.diamond_colour ||
+              p.diamond_clarity ||
+              p.cut ||
+              p.certification ||
+              p.num_stones ||
+              p.total_diamond_weight) && (
+              <div className="mt-6">
+                <h2 className="font-serif text-xl">
+                  Diamond Details
+                </h2>
+
+                <div className="mt-4 grid grid-cols-2 gap-4">
+                  {p.diamond_type && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Diamond Type
+                      </p>
+
+                      <p className="font-medium">
+                        {p.diamond_type}
+                      </p>
+                    </div>
+                  )}
+
+                  {p.diamond_carat && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Carat
+                      </p>
+
+                      <p className="font-medium">
+                        {p.diamond_carat} ct
+                      </p>
+                    </div>
+                  )}
+
+                  {p.diamond_shape && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Shape
+                      </p>
+
+                      <p className="font-medium">
+                        {p.diamond_shape}
+                      </p>
+                    </div>
+                  )}
+
+                  {p.diamond_colour && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Colour
+                      </p>
+
+                      <p className="font-medium">
+                        {p.diamond_colour}
+                      </p>
+                    </div>
+                  )}
+
+                  {p.diamond_clarity && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Clarity
+                      </p>
+
+                      <p className="font-medium">
+                        {p.diamond_clarity}
+                      </p>
+                    </div>
+                  )}
+
+                  {p.cut && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Cut
+                      </p>
+
+                      <p className="font-medium">
+                        {p.cut}
+                      </p>
+                    </div>
+                  )}
+
+                  {p.certification && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Certification
+                      </p>
+
+                      <p className="font-medium">
+                        {p.certification}
+                      </p>
+                    </div>
+                  )}
+
+                  {p.num_stones && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Number of Stones
+                      </p>
+
+                      <p className="font-medium">
+                        {p.num_stones}
+                      </p>
+                    </div>
+                  )}
+
+                  {p.total_diamond_weight && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Total Diamond Weight
+                      </p>
+
+                      <p className="font-medium">
+                        {p.total_diamond_weight} ct
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* =================================================
+                DESCRIPTION
+            ================================================== */}
+            {p.description && (
+              <div className="mt-8">
+                <h2 className="font-serif text-xl">
+                  Description
+                </h2>
+
+                <p className="mt-3 whitespace-pre-line leading-7 text-muted-foreground">
+                  {p.description}
+                </p>
+              </div>
+            )}
+
+            {/* =================================================
+                CART + WISHLIST
+            ================================================== */}
+            <div className="mt-8 space-y-3">
+              {/* Out of stock */}
+              {p.stock_status === "out_of_stock" ? (
+                <Button
+                  variant="outline"
+                  size="xl"
+                  disabled
+                  className="w-full"
+                >
+                  Out Of Stock
+                </Button>
+              ) : alreadyInCart ? (
+                <Button
+                  asChild
+                  variant="gold"
+                  size="xl"
+                  className="w-full"
+                >
+                  <Link to="/cart">
+                    <ShoppingBag className="h-5 w-5" />
+                    View Cart
+                  </Link>
+                </Button>
+              ) : (
+                <Button
+                  variant="gold"
+                  size="xl"
+                  onClick={handleAddToCart}
+                  className="w-full"
+                >
+                  <ShoppingBag className="h-5 w-5" />
+                  Add To Cart
+                </Button>
+              )}
+
+              {/* Wishlist */}
+              <Button
+                type="button"
+                variant="outline"
+                size="xl"
+                onClick={handleWishlist}
+                className="w-full"
+              >
+                <Heart
+                  className={`h-5 w-5 ${
+                    wishlisted
+                      ? "fill-current text-red-500"
+                      : ""
+                  }`}
+                />
+
+                {wishlisted
+                  ? "Remove From Wishlist"
+                  : "Add To Wishlist"}
+              </Button>
+            </div>
+
+            {/* =================================================
+                CONTACT ACTIONS
+            ================================================== */}
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              {/* WhatsApp */}
+              <Button
+                asChild
+                variant="outline"
+              >
+                <a
+                  href={`https://wa.me/919653069612?text=${whatsappMessage}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  WhatsApp
+                </a>
+              </Button>
+
+              {/* Call */}
+              <Button
+                asChild
+                variant="outline"
+              >
+                <a href="tel:+919653069612">
+                  <Phone className="h-4 w-4" />
+                  Call
+                </a>
+              </Button>
+
+              {/* Visit */}
+              <Button
+                asChild
+                variant="outline"
+              >
+                <a
+                  href="https://www.google.com/maps/search/?api=1&query=Shri+Riddhi+Siddhi+Jewellers+Sultanpur+Uttar+Pradesh"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <MapPin className="h-4 w-4" />
+                  Visit
+                </a>
+              </Button>
+            </div>
+
+            {/* =================================================
+                SHARE
+            ================================================== */}
+            <div className="mt-6 flex gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleShare}
+              >
+                <Share2 className="h-4 w-4" />
+                Share
+              </Button>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleCopyLink}
+              >
+                <Copy className="h-4 w-4" />
+                Copy Link
+              </Button>
+            </div>
+
+            {/* =================================================
+                BENEFITS
+            ================================================== */}
+            <div className="mt-8 space-y-3 rounded-2xl border p-5">
+              <div className="flex items-center gap-3">
+                <Check className="h-5 w-5 text-primary" />
+                <span>Certified jewellery</span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Check className="h-5 w-5 text-primary" />
+                <span>
+                  Premium showroom experience
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Check className="h-5 w-5 text-primary" />
+                <span>
+                  Secure online enquiry
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
   );
 }

@@ -3,7 +3,7 @@ import { queryOptions } from "@tanstack/react-query";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { Category, Collection, Enquiry, Media, Offer, ProductFull, Rate, Review, Setting, HomepageSection } from "./types";
 import type { Json } from "@/integrations/supabase/types";
-
+import Razorpay from "razorpay";
 /* ------------ auth helpers ------------ */
 
 async function assertAdmin(context: { supabase: { rpc: (fn: "is_admin") => PromiseLike<{ data: unknown }> }; userId: string }) {
@@ -513,3 +513,195 @@ export const adminHomepageQuery = queryOptions({ queryKey: ["admin", "homepage"]
 export const adminEnquiriesQuery = queryOptions({ queryKey: ["admin", "enquiries"], queryFn: () => adminGetEnquiries() });
 export const adminMediaQuery = queryOptions({ queryKey: ["admin", "media"], queryFn: () => adminListMedia({ data: {} }) });
 export const adminAdminsQuery = queryOptions({ queryKey: ["admin", "admins"], queryFn: () => adminGetAdmins() });
+export const createCustomerOrder = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      customer_name: string;
+      customer_email?: string;
+      customer_phone: string;
+
+      shipping_address: string;
+      shipping_city?: string;
+      shipping_state?: string;
+      shipping_pincode?: string;
+
+      subtotal: number;
+      shipping_charge: number;
+      discount: number;
+      total_amount: number;
+
+      payment_method: string;
+
+      items: Array<{
+        product_id: string;
+        product_name: string;
+        product_slug?: string;
+        quantity: number;
+        unit_price: number;
+        total_price: number;
+        product_image?: string;
+      }>;
+    }) => data,
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const { supabase } = context;
+
+    // ==========================================
+    // 1. CREATE SRSJ ORDER
+    // ==========================================
+
+    const orderNumber = `SRSJ-${Date.now()}`;
+
+    const { data: order, error: orderError } = await supabase
+      .from("orders")
+      .insert({
+        order_number: orderNumber,
+
+        customer_name: data.customer_name,
+        customer_email: data.customer_email || null,
+        customer_phone: data.customer_phone,
+
+        shipping_address: data.shipping_address,
+        shipping_city: data.shipping_city || null,
+        shipping_state: data.shipping_state || null,
+        shipping_pincode: data.shipping_pincode || null,
+
+        subtotal: data.subtotal,
+        shipping_charge: data.shipping_charge,
+        discount: data.discount,
+        total_amount: data.total_amount,
+
+        payment_method: "razorpay",
+        payment_status: "pending",
+        order_status: "pending",
+      })
+      .select("id, order_number")
+      .single();
+
+    if (orderError || !order) {
+      console.error("Order creation failed:", orderError);
+      throw new Error("Unable to create order.");
+    }
+
+    // ==========================================
+    // 2. SAVE ORDER ITEMS
+    // ==========================================
+
+    const orderItems = data.items.map((item) => ({
+      order_id: order.id,
+
+      product_id: item.product_id,
+      product_name: item.product_name,
+      product_slug: item.product_slug || null,
+
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      total_price: item.total_price,
+
+      product_image: item.product_image || null,
+    }));
+
+    const { error: itemsError } = await supabase
+      .from("order_items")
+      .insert(orderItems);
+
+    if (itemsError) {
+      console.error(
+        "Order items creation failed:",
+        itemsError,
+      );
+
+      // Rollback order
+      await supabase
+        .from("orders")
+        .delete()
+        .eq("id", order.id);
+
+      throw new Error("Unable to save order items.");
+    }
+
+    // ==========================================
+    // 3. RAZORPAY ENVIRONMENT VARIABLES
+    // ==========================================
+
+    const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
+    const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
+
+    if (!razorpayKeyId || !razorpayKeySecret) {
+      console.error(
+        "Razorpay environment variables are missing.",
+      );
+
+      throw new Error(
+        "Razorpay is not configured on the server.",
+      );
+    }
+
+    // ==========================================
+    // 4. CREATE RAZORPAY INSTANCE
+    // ==========================================
+
+    const razorpay = new Razorpay({
+      key_id: razorpayKeyId,
+      key_secret: razorpayKeySecret,
+    });
+
+    // ==========================================
+    // 5. CREATE RAZORPAY ORDER
+    // Amount must be in paise
+    // ==========================================
+
+    const razorpayOrder = await razorpay.orders.create({
+      amount: Math.round(data.total_amount * 100),
+      currency: "INR",
+
+      receipt: order.order_number,
+
+      notes: {
+        srsj_order_id: order.id,
+        order_number: order.order_number,
+      },
+    });
+
+    // ==========================================
+    // 6. SAVE RAZORPAY ORDER ID
+    // ==========================================
+
+    const { error: razorpaySaveError } = await supabase
+      .from("orders")
+      .update({
+        razorpay_order_id: razorpayOrder.id,
+      })
+      .eq("id", order.id);
+
+    if (razorpaySaveError) {
+      console.error(
+        "Failed to save Razorpay order ID:",
+        razorpaySaveError,
+      );
+
+      throw new Error(
+        "Unable to connect payment order.",
+      );
+    }
+
+    // ==========================================
+    // 7. RETURN DATA TO CHECKOUT PAGE
+    // ==========================================
+
+    return {
+      success: true,
+
+      orderId: order.id,
+      orderNumber: order.order_number,
+
+      razorpayOrderId: razorpayOrder.id,
+
+      // Public Razorpay Key ID
+      razorpayKeyId,
+
+      amount: razorpayOrder.amount,
+      currency: razorpayOrder.currency,
+    };
+  });

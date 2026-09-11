@@ -15,6 +15,8 @@ import { Route as SiteIndexRouteImport } from './routes/_site/index'
 import { Route as SiteAboutRouteImport } from './routes/_site/about'
 import { Route as SiteBanglesRouteImport } from './routes/_site/bangles'
 import { Route as SiteBraceletsRouteImport } from './routes/_site/bracelets'
+import { Route as SiteCartRouteImport } from './routes/_site/cart'
+import { Route as SiteCheckoutRouteImport } from './routes/_site/checkout'
 import { Route as SiteContactRouteImport } from './routes/_site/contact'
 import { Route as SiteDiamondJewelleryRouteImport } from './routes/_site/diamond-jewellery'
 import { Route as SiteEarringsRouteImport } from './routes/_site/earrings'
@@ -62,6 +64,16 @@ const SiteBanglesRoute = SiteBanglesRouteImport.update({
 const SiteBraceletsRoute = SiteBraceletsRouteImport.update({
   id: '/bracelets',
   path: '/bracelets',
+  getParentRoute: () => SiteRouteRoute,
+} as any)
+const SiteCartRoute = SiteCartRouteImport.update({
+  id: '/cart',
+  path: '/cart',
+  getParentRoute: () => SiteRouteRoute,
+} as any)
+const SiteCheckoutRoute = SiteCheckoutRouteImport.update({
+  id: '/checkout',
+  path: '/checkout',
   getParentRoute: () => SiteRouteRoute,
 } as any)
 const SiteContactRoute = SiteContactRouteImport.update({
@@ -170,6 +182,8 @@ export interface FileRoutesByFullPath {
   '/about': typeof SiteAboutRoute
   '/bangles': typeof SiteBanglesRoute
   '/bracelets': typeof SiteBraceletsRoute
+  '/cart': typeof SiteCartRoute
+  '/checkout': typeof SiteCheckoutRoute
   '/contact': typeof SiteContactRoute
   '/diamond-jewellery': typeof SiteDiamondJewelleryRoute
   '/earrings': typeof SiteEarringsRoute
@@ -196,6 +210,8 @@ export interface FileRoutesByTo {
   '/about': typeof SiteAboutRoute
   '/bangles': typeof SiteBanglesRoute
   '/bracelets': typeof SiteBraceletsRoute
+  '/cart': typeof SiteCartRoute
+  '/checkout': typeof SiteCheckoutRoute
   '/contact': typeof SiteContactRoute
   '/diamond-jewellery': typeof SiteDiamondJewelleryRoute
   '/earrings': typeof SiteEarringsRoute
@@ -224,6 +240,8 @@ export interface FileRoutesById {
   '/_site/about': typeof SiteAboutRoute
   '/_site/bangles': typeof SiteBanglesRoute
   '/_site/bracelets': typeof SiteBraceletsRoute
+  '/_site/cart': typeof SiteCartRoute
+  '/_site/checkout': typeof SiteCheckoutRoute
   '/_site/contact': typeof SiteContactRoute
   '/_site/diamond-jewellery': typeof SiteDiamondJewelleryRoute
   '/_site/earrings': typeof SiteEarringsRoute
@@ -253,6 +271,8 @@ export interface FileRouteTypes {
     | '/about'
     | '/bangles'
     | '/bracelets'
+    | '/cart'
+    | '/checkout'
     | '/contact'
     | '/diamond-jewellery'
     | '/earrings'
@@ -279,6 +299,8 @@ export interface FileRouteTypes {
     | '/about'
     | '/bangles'
     | '/bracelets'
+    | '/cart'
+    | '/checkout'
     | '/contact'
     | '/diamond-jewellery'
     | '/earrings'
@@ -306,6 +328,8 @@ export interface FileRouteTypes {
     | '/_site/about'
     | '/_site/bangles'
     | '/_site/bracelets'
+    | '/_site/cart'
+    | '/_site/checkout'
     | '/_site/contact'
     | '/_site/diamond-jewellery'
     | '/_site/earrings'
@@ -378,6 +402,20 @@ declare module '@tanstack/react-router' {
       path: '/bracelets'
       fullPath: '/bracelets'
       preLoaderRoute: typeof SiteBraceletsRouteImport
+      parentRoute: typeof SiteRouteRoute
+    }
+    '/_site/cart': {
+      id: '/_site/cart'
+      path: '/cart'
+      fullPath: '/cart'
+      preLoaderRoute: typeof SiteCartRouteImport
+      parentRoute: typeof SiteRouteRoute
+    }
+    '/_site/checkout': {
+      id: '/_site/checkout'
+      path: '/checkout'
+      fullPath: '/checkout'
+      preLoaderRoute: typeof SiteCheckoutRouteImport
       parentRoute: typeof SiteRouteRoute
     }
     '/_site/contact': {
@@ -527,6 +565,8 @@ interface SiteRouteRouteChildren {
   SiteAboutRoute: typeof SiteAboutRoute
   SiteBanglesRoute: typeof SiteBanglesRoute
   SiteBraceletsRoute: typeof SiteBraceletsRoute
+  SiteCartRoute: typeof SiteCartRoute
+  SiteCheckoutRoute: typeof SiteCheckoutRoute
   SiteContactRoute: typeof SiteContactRoute
   SiteDiamondJewelleryRoute: typeof SiteDiamondJewelleryRoute
   SiteEarringsRoute: typeof SiteEarringsRoute
@@ -549,6 +589,8 @@ const SiteRouteRouteChildren: SiteRouteRouteChildren = {
   SiteAboutRoute: SiteAboutRoute,
   SiteBanglesRoute: SiteBanglesRoute,
   SiteBraceletsRoute: SiteBraceletsRoute,
+  SiteCartRoute: SiteCartRoute,
+  SiteCheckoutRoute: SiteCheckoutRoute,
   SiteContactRoute: SiteContactRoute,
   SiteDiamondJewelleryRoute: SiteDiamondJewelleryRoute,
   SiteEarringsRoute: SiteEarringsRoute,

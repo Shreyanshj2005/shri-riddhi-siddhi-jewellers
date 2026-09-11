@@ -38,11 +38,6 @@ export function publicClient(): SupabaseClient<Database> {
       fetch: (input, init) => {
         const headers = new Headers(init?.headers);
 
-        /*
-         * With sb_publishable_* keys Supabase may otherwise receive the
-         * publishable key as a Bearer token. We explicitly keep it in
-         * the apikey header.
-         */
         if (
           key.startsWith("sb_") &&
           headers.get("Authorization") === `Bearer ${key}`
@@ -64,20 +59,152 @@ export function publicClient(): SupabaseClient<Database> {
 }
 
 /**
- * Fields required for product cards.
+ * Product card fields.
  *
  * IMPORTANT:
- * discount_pct has intentionally been removed because
- * products table does NOT contain that column.
+ * discount_pct does NOT exist in products table.
  */
 export const CARD_SELECT =
-  "id,name,slug,sku,price,original_price,offer_label,metal,purity,gender,stone,diamond_type,is_new,best_seller,featured,stock_status,status,diamond_carat,diamond_shape," +
+  "id,name,slug,sku,price,original_price,offer_label,metal,purity,gender,stone,diamond_type,is_new,best_seller,featured,stock_status,status,diamond_carat,diamond_shape,product_weight,pricing_mode,making_charges,stone_charges," +
   "images:product_images(id,url,alt,sort_order)," +
   "category:categories!products_category_id_fkey(id,name,slug)," +
   "subcategory:categories!products_subcategory_id_fkey(id,name,slug)";
 
 /**
- * Keep product images in their intended order.
+ * ============================================================
+ * DYNAMIC PRICING
+ * ============================================================
+ */
+
+type RateMap = Record<string, number>;
+
+function getRate(rates: RateMap, key: string): number {
+  const value = rates[key];
+  return Number.isFinite(value) ? value : 0;
+}
+
+function getMetalRate(
+  rates: RateMap,
+  metal: string | null,
+  purity: string | null,
+): number {
+  const m = (metal ?? "").toLowerCase();
+  const p = (purity ?? "").toLowerCase();
+
+  if (m.includes("silver")) {
+    return getRate(rates, "silver");
+  }
+
+  if (p.includes("24")) {
+    return getRate(rates, "gold_24k");
+  }
+
+  if (p.includes("22")) {
+    return getRate(rates, "gold_22k");
+  }
+
+  if (p.includes("18")) {
+    return getRate(rates, "gold_18k");
+  }
+
+  if (p.includes("14")) {
+    return getRate(rates, "gold_18k");
+  }
+
+  return 0;
+}
+
+function calculateProductPrice(
+  product: {
+    price: number;
+    pricing_mode?: string | null;
+    metal?: string | null;
+    purity?: string | null;
+    product_weight?: number | null;
+    diamond_carat?: number | null;
+    making_charges?: number | null;
+    stone_charges?: number | null;
+  },
+  rates: RateMap,
+): number {
+  if (product.pricing_mode !== "automatic") {
+    return Number(product.price) || 0;
+  }
+
+  const productWeight =
+    Number(product.product_weight) || 0;
+
+  const diamondCarat =
+    Number(product.diamond_carat) || 0;
+
+  const metalRate = getMetalRate(
+    rates,
+    product.metal ?? null,
+    product.purity ?? null,
+  );
+
+  if (
+    productWeight <= 0 ||
+    metalRate <= 0
+  ) {
+    return Number(product.price) || 0;
+  }
+
+  const metalValue =
+    metalRate * productWeight;
+
+  const diamondValue =
+    getRate(
+      rates,
+      "diamond_per_carat",
+    ) * diamondCarat;
+
+  const makingCharges =
+    Number(product.making_charges) || 0;
+
+  const stoneCharges =
+    Number(product.stone_charges) || 0;
+
+  return Math.round(
+    metalValue +
+      diamondValue +
+      makingCharges +
+      stoneCharges,
+  );
+}
+
+/**
+ * Fetch current rates.
+ */
+async function fetchCurrentRates(): Promise<RateMap> {
+  const {
+    data,
+    error,
+  } = await publicClient()
+    .from("rates")
+    .select("key,current_rate");
+
+  if (error) {
+    console.error(
+      "[catalog] rates query failed:",
+      error.message,
+    );
+
+    return {};
+  }
+
+  const rates: RateMap = {};
+
+  for (const row of data ?? []) {
+    rates[row.key] =
+      Number(row.current_rate) || 0;
+  }
+
+  return rates;
+}
+
+/**
+ * Keep images ordered.
  */
 export function sortImages<
   T extends {
@@ -86,25 +213,60 @@ export function sortImages<
     }[];
   },
 >(product: T): T {
-  product.images = [...(product.images ?? [])].sort(
-    (a, b) => a.sort_order - b.sort_order,
+  product.images = [
+    ...(product.images ?? []),
+  ].sort(
+    (a, b) =>
+      a.sort_order - b.sort_order,
   );
 
   return product;
 }
 
 /**
+ * Apply calculated prices.
+ */
+function applyCalculatedPrices<T extends {
+  price: number;
+  pricing_mode?: string | null;
+  metal?: string | null;
+  purity?: string | null;
+  product_weight?: number | null;
+  diamond_carat?: number | null;
+  making_charges?: number | null;
+  stone_charges?: number | null;
+}>(
+  products: T[],
+  rates: RateMap,
+): T[] {
+  return products.map((product) => ({
+    ...product,
+    price: calculateProductPrice(
+      product,
+      rates,
+    ),
+  }));
+}
+
+/**
  * Fetch active categories.
  */
 export async function fetchCategories(): Promise<Category[]> {
-  const { data, error } = await publicClient()
+  const {
+    data,
+    error,
+  } = await publicClient()
     .from("categories")
     .select("*")
     .eq("is_active", true)
     .order("sort_order");
 
   if (error) {
-    console.error("[catalog] categories query failed:", error.message);
+    console.error(
+      "[catalog] categories query failed:",
+      error.message,
+    );
+
     return [];
   }
 
@@ -127,10 +289,17 @@ export async function fetchCollections(
     query = query.eq("kind", kind);
   }
 
-  const { data, error } = await query;
+  const {
+    data,
+    error,
+  } = await query;
 
   if (error) {
-    console.error("[catalog] collections query failed:", error.message);
+    console.error(
+      "[catalog] collections query failed:",
+      error.message,
+    );
+
     return [];
   }
 
@@ -141,19 +310,27 @@ export async function fetchCollections(
  * Fetch site settings.
  */
 export async function fetchSettings(): Promise<SettingsMap> {
-  const { data, error } = await publicClient()
+  const {
+    data,
+    error,
+  } = await publicClient()
     .from("settings")
     .select("key,value");
 
   if (error) {
-    console.error("[catalog] settings query failed:", error.message);
+    console.error(
+      "[catalog] settings query failed:",
+      error.message,
+    );
+
     return {};
   }
 
   const out: SettingsMap = {};
 
   for (const row of data ?? []) {
-    out[row.key] = row.value ?? {};
+    out[row.key] =
+      row.value ?? {};
   }
 
   return out;
@@ -171,85 +348,78 @@ export interface CatalogResult {
 }
 
 /**
- * Main product catalogue query.
- *
- * Handles:
- * - category
- * - product type
- * - collection
- * - search
- * - price
- * - metal
- * - purity
- * - gender
- * - stone
- * - diamond type
- * - diamond shape
- * - diamond colour
- * - diamond clarity
- * - number of stones
- * - style
- * - availability
- * - occasion
- * - sorting
- * - pagination
+ * ============================================================
+ * MAIN CATALOG
+ * ============================================================
  */
 export async function queryCatalog(
   s: CatalogSearch,
 ): Promise<CatalogResult> {
   const sb = publicClient();
 
-  /*
-   * Fetch categories first.
-   * Collections are only needed when a collection filter exists.
-   */
-  const [categories, collections] = await Promise.all([
+  const [
+    rates,
+    categories,
+    collections,
+  ] = await Promise.all([
+    fetchCurrentRates(),
     fetchCategories(),
     s.collection
       ? fetchCollections()
-      : Promise.resolve([] as Collection[]),
+      : Promise.resolve(
+          [] as Collection[],
+        ),
   ]);
 
   const bySlug = new Map(
-    categories.map((category) => [category.slug, category]),
+    categories.map(
+      (category) => [
+        category.slug,
+        category,
+      ],
+    ),
   );
 
-  const category = s.cat
-    ? bySlug.get(s.cat) ?? null
-    : null;
+  const category =
+    s.cat
+      ? bySlug.get(s.cat) ?? null
+      : null;
 
-  const type = s.type
-    ? bySlug.get(s.type) ?? null
-    : null;
+  const type =
+    s.type
+      ? bySlug.get(s.type) ?? null
+      : null;
 
-  const collection = s.collection
-    ? collections.find(
-        (item) => item.slug === s.collection,
-      ) ?? null
-    : null;
+  const collection =
+    s.collection
+      ? collections.find(
+          (item) =>
+            item.slug ===
+            s.collection,
+        ) ?? null
+      : null;
 
-  const giftsAny = s.collection === "__gifts";
+  const giftsAny =
+    s.collection === "__gifts";
 
-  /**
-   * Collection filtering requires an inner relation.
-   */
-  const select = collection
-    ? `${CARD_SELECT},product_collections!inner(collection_id)`
-    : giftsAny
-      ? `${CARD_SELECT},product_collections!inner(collection:collections!inner(kind))`
-      : CARD_SELECT;
+  const select =
+    collection
+      ? `${CARD_SELECT},product_collections!inner(collection_id)`
+      : giftsAny
+        ? `${CARD_SELECT},product_collections!inner(collection:collections!inner(kind))`
+        : CARD_SELECT;
 
   let query = sb
     .from("products")
-    .select(select, {
-      count: "exact",
-    })
+    .select(
+      select,
+      {
+        count: "exact",
+      },
+    )
     .eq("status", "published")
     .is("deleted_at", null);
 
-  /*
-   * COLLECTION FILTER
-   */
   if (collection) {
     query = query.eq(
       "product_collections.collection_id",
@@ -257,9 +427,6 @@ export async function queryCatalog(
     );
   }
 
-  /*
-   * GIFT COLLECTION
-   */
   if (giftsAny) {
     query = query.eq(
       "product_collections.collection.kind",
@@ -267,182 +434,143 @@ export async function queryCatalog(
     );
   }
 
-  /*
-   * CATEGORY FILTER
-   */
   if (category) {
-    /*
-     * Diamond Jewellery:
-     * Include:
-     * - products directly inside Diamond Jewellery
-     * - products whose subcategory is Diamond Jewellery
-     * - products having a diamond_type
-     */
-    if (category.slug === "diamond-jewellery") {
+    if (
+      category.slug ===
+      "diamond-jewellery"
+    ) {
       query = query.or(
         `category_id.eq.${category.id},subcategory_id.eq.${category.id},diamond_type.not.is.null`,
       );
-    }
-
-    /*
-     * Solitaire Jewellery:
-     * Include:
-     * - category
-     * - Solitaire stone
-     * - Solitaire diamond type
-     * - Solitaire num_stones
-     */
-    else if (category.slug === "solitaire-jewellery") {
+    } else if (
+      category.slug ===
+      "solitaire-jewellery"
+    ) {
       query = query.or(
         `category_id.eq.${category.id},stone.eq.Solitaire,diamond_type.eq.Solitaire,num_stones.eq.Solitaire`,
       );
-    }
-
-    /*
-     * Gemstone Jewellery:
-     * Include products containing supported gemstones.
-     */
-    else if (category.slug === "gemstone-jewellery") {
+    } else if (
+      category.slug ===
+      "gemstone-jewellery"
+    ) {
       query = query.or(
         `category_id.eq.${category.id},stone.in.(Ruby,Emerald,Sapphire,Pearl,Gemstone,"Diamond + Gemstone")`,
       );
-    }
-
-    /*
-     * Normal category:
-     * category OR subcategory
-     *
-     * This is what Rings uses.
-     */
-    else {
+    } else {
       query = query.or(
         `category_id.eq.${category.id},subcategory_id.eq.${category.id}`,
       );
     }
   }
 
-  /*
-   * TYPE FILTER
-   */
   if (type) {
     query = query.or(
       `category_id.eq.${type.id},subcategory_id.eq.${type.id}`,
     );
   }
 
-  /*
-   * SEARCH
-   */
   if (s.q?.trim()) {
-    const words = s.q
-      .toLowerCase()
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 6);
+    const words =
+      s.q
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 6);
 
     for (const word of words) {
-      const safeWord = word.replace(/[%_]/g, "");
+      const safeWord =
+        word.replace(
+          /[%_]/g,
+          "",
+        );
 
       if (safeWord) {
-        query = query.ilike(
-          "search_text",
-          `%${safeWord}%`,
-        );
+        query =
+          query.ilike(
+            "search_text",
+            `%${safeWord}%`,
+          );
       }
     }
   }
 
-  /*
-   * PRICE
-   */
-  if (s.min !== undefined) {
-    query = query.gte("price", s.min);
-  }
-
-  if (s.max !== undefined) {
-    query = query.lte("price", s.max);
-  }
-
-  /*
-   * METAL
-   */
   if (s.metal?.length) {
-    query = query.in("metal", s.metal);
+    query = query.in(
+      "metal",
+      s.metal,
+    );
   }
 
-  /*
-   * PURITY
-   */
   if (s.purity?.length) {
-    query = query.in("purity", s.purity);
+    query = query.in(
+      "purity",
+      s.purity,
+    );
   }
 
-  /*
-   * GENDER
-   */
   if (s.gender?.length) {
-    query = query.in("gender", s.gender);
+    query = query.in(
+      "gender",
+      s.gender,
+    );
   }
 
-  /*
-   * STONE
-   */
   if (s.stone?.length) {
-    query = query.in("stone", s.stone);
+    query = query.in(
+      "stone",
+      s.stone,
+    );
   }
 
-  /*
-   * DIAMOND TYPE
-   */
   if (s.dtype?.length) {
-    query = query.in("diamond_type", s.dtype);
+    query = query.in(
+      "diamond_type",
+      s.dtype,
+    );
   }
 
-  /*
-   * DIAMOND SHAPE
-   */
   if (s.shape?.length) {
-    query = query.in("diamond_shape", s.shape);
+    query = query.in(
+      "diamond_shape",
+      s.shape,
+    );
   }
 
-  /*
-   * DIAMOND COLOUR
-   */
   if (s.colour?.length) {
-    query = query.in("diamond_colour", s.colour);
+    query = query.in(
+      "diamond_colour",
+      s.colour,
+    );
   }
 
-  /*
-   * DIAMOND CLARITY
-   */
   if (s.clarity?.length) {
-    query = query.in("diamond_clarity", s.clarity);
+    query = query.in(
+      "diamond_clarity",
+      s.clarity,
+    );
   }
 
-  /*
-   * NUMBER OF STONES
-   */
   if (s.stones?.length) {
-    query = query.in("num_stones", s.stones);
+    query = query.in(
+      "num_stones",
+      s.stones,
+    );
   }
 
-  /*
-   * STYLE
-   */
   if (s.style?.length) {
-    query = query.in("style", s.style);
+    query = query.in(
+      "style",
+      s.style,
+    );
   }
 
-  /*
-   * STOCK STATUS
-   */
   if (s.avail?.length) {
-    query = query.in("stock_status", s.avail);
+    query = query.in(
+      "stock_status",
+      s.avail,
+    );
   }
 
-  /*
-   * OCCASIONS ARRAY
-   */
   if (s.occasion?.length) {
     query = query.overlaps(
       "occasions",
@@ -450,105 +578,8 @@ export async function queryCatalog(
     );
   }
 
-  /*
-   * SORTING
-   */
-  switch (s.sort ?? "recommended") {
-    case "newest":
-      query = query.order(
-        "created_at",
-        { ascending: false },
-      );
-      break;
-
-    case "popular":
-      query = query.order(
-        "popularity",
-        { ascending: false },
-      );
-      break;
-
-    case "price_asc":
-      query = query.order(
-        "price",
-        { ascending: true },
-      );
-      break;
-
-    case "price_desc":
-      query = query.order(
-        "price",
-        { ascending: false },
-      );
-      break;
-
-    /*
-     * There is NO discount_pct column in products.
-     *
-     * Instead we calculate discount using:
-     *
-     * original_price vs price
-     *
-     * PostgreSQL cannot order by that expression directly
-     * through this Supabase query builder.
-     *
-     * So we use original_price as the closest safe
-     * server-side ordering.
-     */
-    case "discount":
-      query = query.order(
-        "original_price",
-        { ascending: false, nullsFirst: false },
-      );
-      break;
-
-    case "best_selling":
-      query = query.order(
-        "sales_count",
-        { ascending: false },
-      );
-      break;
-
-    default:
-      query = query
-        .order(
-          "featured",
-          { ascending: false },
-        )
-        .order(
-          "popularity",
-          { ascending: false },
-        );
-      break;
-  }
-
-  /*
-   * Stable secondary ordering.
-   */
-  query = query.order(
-    "created_at",
-    { ascending: false },
-  );
-
-  /*
-   * PAGINATION
-   */
-  const page = s.page ?? 1;
-
-  const from =
-    (page - 1) * PAGE_SIZE;
-
-  query = query.range(
-    from,
-    from + PAGE_SIZE - 1,
-  );
-
-  /*
-   * EXECUTE
-   */
   const {
     data,
-    count,
     error,
   } = await query;
 
@@ -564,52 +595,241 @@ export async function queryCatalog(
         category: s.cat,
         type: s.type,
         collection: s.collection,
-        page,
       },
     );
 
     return {
       items: [],
       total: 0,
-      page,
+      page: s.page ?? 1,
       pageSize: PAGE_SIZE,
-      category: category ?? type,
+      category:
+        category ?? type,
       collection,
     };
   }
 
+  let products =
+    applyCalculatedPrices(
+      (data ?? []) as unknown as ProductCard[],
+      rates,
+    );
+
+  if (s.min !== undefined) {
+    products =
+      products.filter(
+        (product) =>
+          Number(product.price) >=
+          s.min!,
+      );
+  }
+
+  if (s.max !== undefined) {
+    products =
+      products.filter(
+        (product) =>
+          Number(product.price) <=
+          s.max!,
+      );
+  }
+
+  switch (
+    s.sort ?? "recommended"
+  ) {
+    case "price_asc":
+      products.sort(
+        (a, b) =>
+          Number(a.price) -
+          Number(b.price),
+      );
+      break;
+
+    case "price_desc":
+      products.sort(
+        (a, b) =>
+          Number(b.price) -
+          Number(a.price),
+      );
+      break;
+
+    case "newest":
+      products.sort(
+        (a, b) =>
+          new Date(
+            String(
+              (b as any).created_at ??
+                "",
+            ),
+          ).getTime() -
+          new Date(
+            String(
+              (a as any).created_at ??
+                "",
+            ),
+          ).getTime(),
+      );
+      break;
+
+    case "popular":
+      products.sort(
+        (a, b) =>
+          Number(
+            (b as any).popularity ??
+              0,
+          ) -
+          Number(
+            (a as any).popularity ??
+              0,
+          ),
+      );
+      break;
+
+    case "best_selling":
+      products.sort(
+        (a, b) =>
+          Number(
+            (b as any).sales_count ??
+              0,
+          ) -
+          Number(
+            (a as any).sales_count ??
+              0,
+          ),
+      );
+      break;
+
+    case "discount":
+      products.sort(
+        (a, b) =>
+          Number(
+            (b as any).original_price ??
+              0,
+          ) -
+          Number(
+            (a as any).original_price ??
+              0,
+          ),
+      );
+      break;
+
+    default:
+      products.sort(
+        (a, b) => {
+          const featuredDiff =
+            Number(
+              Boolean(
+                (b as any).featured,
+              ),
+            ) -
+            Number(
+              Boolean(
+                (a as any).featured,
+              ),
+            );
+
+          if (
+            featuredDiff !== 0
+          ) {
+            return featuredDiff;
+          }
+
+          return (
+            Number(
+              (b as any).popularity ??
+                0,
+            ) -
+            Number(
+              (a as any).popularity ??
+                0,
+            )
+          );
+        },
+      );
+      break;
+  }
+
+  const page =
+    s.page ?? 1;
+
+  const total =
+    products.length;
+
+  const from =
+    (page - 1) *
+    PAGE_SIZE;
+
+  const paginated =
+    products.slice(
+      from,
+      from + PAGE_SIZE,
+    );
+
   const items =
-    ((data ?? []) as unknown as ProductCard[])
-      .map(sortImages);
+    paginated.map(
+      sortImages,
+    );
 
   return {
     items,
-    total: count ?? items.length,
+    total,
     page,
     pageSize: PAGE_SIZE,
-    category: category ?? type,
+    category:
+      category ?? type,
     collection,
   };
 }
 
 /**
- * Fetch a complete product by slug.
+ * ============================================================
+ * PRODUCT DETAIL
+ * ============================================================
  *
- * Used on:
- * /products/:slug
+ * FIX:
+ * Product itself is fetched separately from collections.
+ *
+ * This prevents a broken/missing product_collections
+ * relationship from causing the complete product query
+ * to return null and showing "Product not found".
  */
 export async function fetchProductBySlug(
   slug: string,
 ): Promise<ProductFull | null> {
+  const cleanSlug =
+    String(slug ?? "").trim();
+
+  if (!cleanSlug) {
+    return null;
+  }
+
+  const sb = publicClient();
+
+  /*
+   * STEP 1:
+   * Fetch the product itself.
+   */
   const {
     data,
     error,
-  } = await publicClient()
+  } = await sb
     .from("products")
     .select(
-      "*,images:product_images(*),category:categories!products_category_id_fkey(id,name,slug),subcategory:categories!products_subcategory_id_fkey(id,name,slug),product_collections(collection:collections(id,name,slug,kind))",
+      `
+      *,
+      images:product_images(*),
+      category:categories!products_category_id_fkey(
+        id,
+        name,
+        slug
+      ),
+      subcategory:categories!products_subcategory_id_fkey(
+        id,
+        name,
+        slug
+      )
+      `,
     )
-    .eq("slug", slug)
+    .eq("slug", cleanSlug)
     .eq("status", "published")
     .is("deleted_at", null)
     .maybeSingle();
@@ -620,73 +840,141 @@ export async function fetchProductBySlug(
       error.message,
     );
 
+    console.error(
+      "[catalog] requested slug:",
+      cleanSlug,
+    );
+
     return null;
   }
 
   if (!data) {
+    console.error(
+      "[catalog] product not found:",
+      cleanSlug,
+    );
+
     return null;
   }
 
+  /*
+   * STEP 2:
+   * Fetch product collections separately.
+   */
   const {
-    product_collections,
-    ...rest
-  } = data as unknown as ProductFull & {
-    product_collections: {
-      collection:
-        ProductFull["collections"][number] | null;
-    }[];
-  };
+    data: collectionRows,
+    error: collectionError,
+  } = await sb
+    .from("product_collections")
+    .select(
+      `
+      collection:collections(
+        id,
+        name,
+        slug,
+        kind
+      )
+      `,
+    )
+    .eq(
+      "product_id",
+      data.id,
+    );
 
+  if (collectionError) {
+    console.warn(
+      "[catalog] product collections query failed:",
+      collectionError.message,
+    );
+  }
+
+  /*
+   * STEP 3:
+   * Fetch current rates.
+   */
+  const rates =
+    await fetchCurrentRates();
+
+  /*
+   * STEP 4:
+   * Calculate live price.
+   */
+  const calculatedPrice =
+    calculateProductPrice(
+      data as any,
+      rates,
+    );
+
+  /*
+   * STEP 5:
+   * Build collection array.
+   */
+  const collections =
+    (collectionRows ?? [])
+      .map(
+        (row: any) =>
+          row.collection,
+      )
+      .filter(Boolean);
+
+  /*
+   * STEP 6:
+   * Build final product.
+   */
   const full: ProductFull = {
-    ...(rest as ProductFull),
+    ...(data as unknown as ProductFull),
+
+    price: calculatedPrice,
 
     collections:
-      product_collections
-        .map(
-          (pc) => pc.collection,
-        )
-        .filter(
-          (
-            collection,
-          ): collection is NonNullable<
-            typeof collection
-          > => !!collection,
-        ),
+      collections as ProductFull["collections"],
   };
 
+  /*
+   * STEP 7:
+   * Sort images.
+   */
   return sortImages(full);
 }
 
 /**
- * Fetch products related to the current product.
+ * ============================================================
+ * RELATED PRODUCTS
+ * ============================================================
  */
 export async function fetchRelated(
   product: ProductFull,
   limit = 4,
 ): Promise<ProductCard[]> {
-  const sb = publicClient();
+  const sb =
+    publicClient();
 
-  let query = sb
-    .from("products")
-    .select(CARD_SELECT)
-    .eq("status", "published")
-    .is("deleted_at", null)
-    .neq("id", product.id)
-    .limit(limit);
+  let query =
+    sb
+      .from("products")
+      .select(CARD_SELECT)
+      .eq("status", "published")
+      .is("deleted_at", null)
+      .neq("id", product.id)
+      .limit(limit);
 
   if (product.category_id) {
-    query = query.or(
-      `category_id.eq.${product.category_id},subcategory_id.eq.${product.subcategory_id ?? product.category_id}`,
-    );
+    query =
+      query.or(
+        `category_id.eq.${product.category_id},subcategory_id.eq.${product.subcategory_id ?? product.category_id}`,
+      );
   }
 
   const {
     data,
     error,
-  } = await query.order(
-    "popularity",
-    { ascending: false },
-  );
+  } =
+    await query.order(
+      "popularity",
+      {
+        ascending: false,
+      },
+    );
 
   if (error) {
     console.error(
@@ -697,13 +985,19 @@ export async function fetchRelated(
     return [];
   }
 
-  return (
-    (data ?? []) as unknown as ProductCard[]
+  const rates =
+    await fetchCurrentRates();
+
+  return applyCalculatedPrices(
+    (data ?? []) as unknown as ProductCard[],
+    rates,
   ).map(sortImages);
 }
 
 /**
- * Fetch products belonging to a collection.
+ * ============================================================
+ * COLLECTION PRODUCTS
+ * ============================================================
  */
 export async function fetchCollectionProducts(
   slug: string,
@@ -712,26 +1006,25 @@ export async function fetchCollectionProducts(
   const {
     data,
     error,
-  } = await publicClient()
-    .from("products")
-    .select(
-      `${CARD_SELECT},product_collections!inner(collection:collections!inner(slug))`,
-    )
-    .eq("status", "published")
-    .is("deleted_at", null)
-    .eq(
-      "product_collections.collection.slug",
-      slug,
-    )
-    .order(
-      "featured",
-      { ascending: false },
-    )
-    .order(
-      "popularity",
-      { ascending: false },
-    )
-    .limit(limit);
+  } =
+    await publicClient()
+      .from("products")
+      .select(
+        `${CARD_SELECT},product_collections!inner(collection:collections!inner(slug))`,
+      )
+      .eq("status", "published")
+      .is("deleted_at", null)
+      .eq(
+        "product_collections.collection.slug",
+        slug,
+      )
+      .order("featured", {
+        ascending: false,
+      })
+      .order("popularity", {
+        ascending: false,
+      })
+      .limit(limit);
 
   if (error) {
     console.error(
@@ -742,13 +1035,19 @@ export async function fetchCollectionProducts(
     return [];
   }
 
-  return (
-    (data ?? []) as unknown as ProductCard[]
+  const rates =
+    await fetchCurrentRates();
+
+  return applyCalculatedPrices(
+    (data ?? []) as unknown as ProductCard[],
+    rates,
   ).map(sortImages);
 }
 
 /**
- * Fetch featured / best seller / new products.
+ * ============================================================
+ * FEATURED / BEST SELLER / NEW
+ * ============================================================
  */
 export async function fetchFlagged(
   flag:
@@ -760,17 +1059,17 @@ export async function fetchFlagged(
   const {
     data,
     error,
-  } = await publicClient()
-    .from("products")
-    .select(CARD_SELECT)
-    .eq("status", "published")
-    .is("deleted_at", null)
-    .eq(flag, true)
-    .order(
-      "popularity",
-      { ascending: false },
-    )
-    .limit(limit);
+  } =
+    await publicClient()
+      .from("products")
+      .select(CARD_SELECT)
+      .eq("status", "published")
+      .is("deleted_at", null)
+      .eq(flag, true)
+      .order("popularity", {
+        ascending: false,
+      })
+      .limit(limit);
 
   if (error) {
     console.error(
@@ -781,13 +1080,19 @@ export async function fetchFlagged(
     return [];
   }
 
-  return (
-    (data ?? []) as unknown as ProductCard[]
+  const rates =
+    await fetchCurrentRates();
+
+  return applyCalculatedPrices(
+    (data ?? []) as unknown as ProductCard[],
+    rates,
   ).map(sortImages);
 }
 
 /**
- * Fetch best-selling diamond products.
+ * ============================================================
+ * DIAMOND PRODUCTS
+ * ============================================================
  */
 export async function fetchDiamondProducts(
   limit = 8,
@@ -795,25 +1100,22 @@ export async function fetchDiamondProducts(
   const {
     data,
     error,
-  } = await publicClient()
-    .from("products")
-    .select(CARD_SELECT)
-    .eq("status", "published")
-    .is("deleted_at", null)
-    .not(
-      "diamond_type",
-      "is",
-      null,
-    )
-    .eq(
-      "best_seller",
-      true,
-    )
-    .order(
-      "sales_count",
-      { ascending: false },
-    )
-    .limit(limit);
+  } =
+    await publicClient()
+      .from("products")
+      .select(CARD_SELECT)
+      .eq("status", "published")
+      .is("deleted_at", null)
+      .not(
+        "diamond_type",
+        "is",
+        null,
+      )
+      .eq("best_seller", true)
+      .order("sales_count", {
+        ascending: false,
+      })
+      .limit(limit);
 
   if (error) {
     console.error(
@@ -824,7 +1126,11 @@ export async function fetchDiamondProducts(
     return [];
   }
 
-  return (
-    (data ?? []) as unknown as ProductCard[]
+  const rates =
+    await fetchCurrentRates();
+
+  return applyCalculatedPrices(
+    (data ?? []) as unknown as ProductCard[],
+    rates,
   ).map(sortImages);
 }
