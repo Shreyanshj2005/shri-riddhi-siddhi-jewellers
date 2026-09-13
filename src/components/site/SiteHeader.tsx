@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Heart, Menu, MessageCircle, Phone, Search, ChevronDown, X,ShoppingBag } from "lucide-react";
+import { Heart, Menu, MessageCircle, Phone, Search, ChevronDown, X,ShoppingBag, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { chromeQuery } from "@/lib/catalog.functions";
 import { DEFAULT_CONTACT, getSetting, type ContactSettings, type PromoSettings } from "@/lib/types";
@@ -85,6 +85,15 @@ export function SiteHeader() {
               <button className="p-2 hover:text-gold transition-colors" aria-label="Search" onClick={() => setSearchOpen(true)}>
                 <Search className="h-5 w-5" strokeWidth={1.5} />
               </button>
+              <Link
+                to="/account"
+                className="p-2 hover:text-gold transition-colors"
+                aria-label="My account"
+                title="My Account"
+              >
+                <UserRound className="h-5 w-5" strokeWidth={1.5} />
+              </Link>
+
               <button
   type="button"
   className="relative p-2 hover:text-gold transition-colors"

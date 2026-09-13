@@ -4,6 +4,7 @@ import { ArrowLeft, Lock, ShoppingBag } from "lucide-react";
 
 import { useCart } from "@/context/CartContext";
 import { createCustomerOrder } from "@/lib/admin.functions";
+import { verifyCustomerPayment } from "@/lib/customer.functions";
 
 export const Route = createFileRoute("/_site/checkout")({
   component: CheckoutPage,
@@ -288,17 +289,31 @@ function CheckoutPage() {
           color: "#111111",
         },
 
-        handler: (response) => {
-          console.log(
-            "Razorpay TEST payment successful:",
-            response,
-          );
+        handler: async (response) => {
+          try {
+            await verifyCustomerPayment({
+              data: {
+                orderId: result.orderId,
+                razorpayOrderId: response.razorpay_order_id,
+                razorpayPaymentId: response.razorpay_payment_id,
+                razorpaySignature: response.razorpay_signature,
+              },
+            });
 
-          alert(
-            `Test Payment Successful!\n\nOrder No: ${result.orderNumber}\nPayment ID: ${response.razorpay_payment_id}`,
-          );
+            alert(
+              `Payment Successful!\n\nOrder No: ${result.orderNumber}\nPayment ID: ${response.razorpay_payment_id}`,
+            );
 
-          clearCart();
+            clearCart();
+          } catch (error) {
+            console.error("Payment verification error:", error);
+
+            alert(
+              error instanceof Error
+                ? error.message
+                : "Payment was received, but order verification failed. Please contact the showroom.",
+            );
+          }
         },
 
         modal: {

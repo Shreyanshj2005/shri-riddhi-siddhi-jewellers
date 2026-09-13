@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { upsertCustomerProfile } from "@/lib/customer.functions";
 
 interface CustomerAuthPopupProps {
   open: boolean;
@@ -90,14 +91,15 @@ export function CustomerAuthPopup({
         throw new Error("Unable to create customer session");
       }
 
-      localStorage.setItem(
-        "srsj_customer_profile",
-        JSON.stringify({
-          name: name.trim(),
+      await upsertCustomerProfile({
+        data: {
+          full_name: name.trim(),
           phone: phone.trim(),
           email: email.trim(),
-        })
-      );
+        },
+      });
+
+      localStorage.removeItem("srsj_login_popup_skipped");
 
       toast.success("Welcome to Shri Riddhi Siddhi Jewellers");
 

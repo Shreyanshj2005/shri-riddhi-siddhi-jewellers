@@ -668,6 +668,8 @@ export const createCustomerOrder = createServerFn({ method: "POST" })
         .insert({
           order_number: orderNumber,
 
+          user_id: context.userId,
+
           customer_name: data.customer_name,
           customer_email:
             data.customer_email || null,
