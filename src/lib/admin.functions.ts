@@ -141,6 +141,41 @@ export const adminSaveProduct = createServerFn({ method: "POST" })
     const { id, collectionIds, images, ...fields } = data;
 
     let productId = id;
+
+    // Validate slug/SKU uniqueness ourselves so edit mode can keep its own values.
+    // The database still remains the final source of truth for uniqueness.
+    const normalizedSlug = String(fields.slug ?? "").trim().toLowerCase();
+    const normalizedSku = fields.sku == null ? "" : String(fields.sku).trim();
+
+    const { data: slugMatch, error: slugLookupError } = await sb
+      .from("products")
+      .select("id")
+      .eq("slug", normalizedSlug)
+      .neq("id", id ?? "00000000-0000-0000-0000-000000000000")
+      .maybeSingle();
+
+    if (slugLookupError) throw new Error(`Unable to check Product Link / Slug: ${slugLookupError.message}`);
+    if (slugMatch) {
+      throw new Error("A product with this Product Link / Slug already exists. Please use a unique slug.");
+    }
+
+    if (normalizedSku) {
+      const { data: skuMatch, error: skuLookupError } = await sb
+        .from("products")
+        .select("id")
+        .eq("sku", normalizedSku)
+        .neq("id", id ?? "00000000-0000-0000-0000-000000000000")
+        .maybeSingle();
+
+      if (skuLookupError) throw new Error(`Unable to check SKU: ${skuLookupError.message}`);
+      if (skuMatch) {
+        throw new Error("A product with this SKU already exists. Please use a unique SKU.");
+      }
+    }
+
+    fields.slug = normalizedSlug;
+    if (fields.sku != null) fields.sku = normalizedSku || null;
+
     if (id) {
       const { data: before } = await sb.from("products").select("price,status").eq("id", id).maybeSingle();
       const { error } = await sb.from("products").update(fields).eq("id", id);
@@ -667,8 +702,6 @@ export const createCustomerOrder = createServerFn({ method: "POST" })
         .from("orders")
         .insert({
           order_number: orderNumber,
-
-          user_id: context.userId,
 
           customer_name: data.customer_name,
           customer_email:

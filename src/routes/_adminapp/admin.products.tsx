@@ -75,7 +75,7 @@ function ProductsPage() {
       }),
   });
 
-  const { data: lookups } = useQuery({
+  const { data: lookups, isError: lookupsError, error: lookupsErrorDetail, refetch: refetchLookups } = useQuery({
     queryKey: ["admin", "lookups"],
     queryFn: () => adminGetLookups(),
     enabled: showForm,
@@ -686,6 +686,8 @@ function ProductsPage() {
           productId={editProductId}
           categories={lookups?.categories ?? []}
           collections={lookups?.collections ?? []}
+          lookupError={lookupsError ? (lookupsErrorDetail instanceof Error ? lookupsErrorDetail.message : "Unable to load categories and collections") : null}
+          onRetryLookups={() => void refetchLookups()}
           onClose={() => {
             setShowForm(false);
             setEditProductId(null);
@@ -716,6 +718,8 @@ function ProductForm({
   productId,
   categories,
   collections,
+  lookupError,
+  onRetryLookups,
   onClose,
   onSaved,
 }: {
@@ -730,6 +734,8 @@ function ProductForm({
     name: string;
     slug?: string;
   }>;
+  lookupError: string | null;
+  onRetryLookups: () => void;
   onClose: () => void;
   onSaved: () => Promise<void> | void;
 }) {
@@ -1087,6 +1093,23 @@ function ProductForm({
         </div>
 
         <div className="space-y-8 p-6">
+          {lookupError && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+              <p className="text-sm font-medium text-destructive">Unable to load categories</p>
+              <p className="mt-1 text-xs text-muted-foreground">{lookupError}</p>
+              <Button type="button" variant="outline" size="sm" className="mt-3" onClick={onRetryLookups}>
+                Try Again
+              </Button>
+            </div>
+          )}
+
+          {!lookupError && categories.length === 0 && (
+            <div className="rounded-lg border border-amber-300/50 bg-amber-50 p-4">
+              <p className="text-sm font-medium">No categories available</p>
+              <p className="mt-1 text-xs text-muted-foreground">Run the category seed SQL in Supabase, then click Try Again.</p>
+            </div>
+          )}
+
           {/* Basic Information */}
           <FormSection title="Basic Information">
             <div className="grid gap-4 md:grid-cols-2">
