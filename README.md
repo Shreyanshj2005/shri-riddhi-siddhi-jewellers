@@ -671,7 +671,7 @@ Diamond products should have richer information.
 Fields:
 
 Diamond Type
-Natural / Lab Grown
+Natural 
 
 Diamond Shape
 

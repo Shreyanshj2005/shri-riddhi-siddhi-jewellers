@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Heart, Menu, MessageCircle, Phone, Search, ChevronDown, X } from "lucide-react";
+import { Heart, Menu, MessageCircle, Phone, Search, ChevronDown, X,ShoppingBag } from "lucide-react";
 import { useEffect, useState } from "react";
 import { chromeQuery } from "@/lib/catalog.functions";
 import { DEFAULT_CONTACT, getSetting, type ContactSettings, type PromoSettings } from "@/lib/types";
@@ -11,6 +11,8 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { SearchDialog } from "./SearchDialog";
 import { cn } from "@/lib/utils";
+import { useCart } from "@/context/CartContext";
+import { CartDrawer } from "@/components/cart/CartDrawer";
 
 export function SiteHeader() {
   const { data } = useQuery(chromeQuery);
@@ -23,7 +25,9 @@ export function SiteHeader() {
   const occasionCollections = (data?.collections ?? []).filter((c) => c.kind === "occasion");
 
   const { count } = useWishlist();
+  const { cartCount } = useCart();
   const [open, setOpen] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [mega, setMega] = useState<string | null>(null);
@@ -81,6 +85,24 @@ export function SiteHeader() {
               <button className="p-2 hover:text-gold transition-colors" aria-label="Search" onClick={() => setSearchOpen(true)}>
                 <Search className="h-5 w-5" strokeWidth={1.5} />
               </button>
+              <button
+  type="button"
+  className="relative p-2 hover:text-gold transition-colors"
+  aria-label="Cart"
+  onClick={() => setCartOpen(true)}
+>
+  <ShoppingBag
+    className="h-5 w-5"
+    strokeWidth={1.5}
+  />
+
+  {cartCount > 0 && (
+    <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-gold px-1 text-[0.6rem] font-medium text-gold-foreground">
+      {cartCount}
+    </span>
+  )}
+</button>
+
               <Link to="/wishlist" className="relative p-2 hover:text-gold transition-colors" aria-label="Wishlist">
                 <Heart className="h-5 w-5" strokeWidth={1.5} />
                 {count > 0 && (
@@ -182,7 +204,7 @@ export function SiteHeader() {
                 </MegaColumn>
                 <MegaColumn title="By Diamond Type" className="col-span-3">
                   <MegaLink to="/diamond-jewellery" search={{ dtype: "Natural Diamond" }} label="Natural Diamonds" />
-                  <MegaLink to="/diamond-jewellery" search={{ dtype: "Lab-Grown Diamond" }} label="Lab-Grown Diamonds" />
+                  
                   <MegaLink to="/diamond-jewellery" search={{ stone: "Solitaire" }} label="Solitaire" />
                   <MegaLink to="/diamond-jewellery" search={{ stone: "Diamond + Gemstone" }} label="Diamond + Gemstone" />
                 </MegaColumn>
@@ -271,6 +293,10 @@ export function SiteHeader() {
       </Sheet>
 
       <SearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
+      <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)}/>
+  
+
+
     </header>
   );
 }

@@ -1470,9 +1470,7 @@ function ProductForm({
                   <option value="">Select</option>
                   <option value="Natural">
                     Natural
-                  </option>
-                  <option value="Lab Grown">
-                    Lab Grown
+                  
                   </option>
                 </select>
               </Field>

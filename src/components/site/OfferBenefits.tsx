@@ -43,7 +43,7 @@ export function OfferBenefits() {
         <div className="mt-5 grid gap-4 sm:grid-cols-3">
           <MiniBenefit
             icon={BadgePercent}
-            title="Flat 25% OFF"
+            title="Flat 2.5% OFF"
             text="Diamond jewellery making charges"
           />
 

@@ -12,7 +12,7 @@ export const METALS = ["Gold", "White Gold", "Rose Gold", "Platinum", "Silver"];
 export const PURITIES = ["14K", "18K", "22K", "24K"];
 export const GENDERS = ["Women", "Men", "Unisex", "Kids"];
 export const STONES = ["Diamond", "Solitaire", "Diamond + Gemstone", "Gemstone", "Ruby", "Emerald", "Sapphire", "Pearl"];
-export const DIAMOND_TYPES = ["Natural Diamond", "Lab-Grown Diamond", "Solitaire"];
+export const DIAMOND_TYPES = ["Natural Diamond",  "Solitaire"];
 export const DIAMOND_SHAPES = ["Round", "Oval", "Princess", "Emerald", "Pear", "Marquise", "Cushion", "Heart"];
 export const DIAMOND_COLOURS = ["D", "E", "F", "G", "H", "I", "J"];
 export const CLARITIES = ["IF", "VVS", "VS", "SI"];
@@ -20,7 +20,7 @@ export const NUM_STONES = ["Solitaire", "Single Stone", "Multi Stone"];
 export const OCCASIONS = ["Wedding", "Engagement", "Anniversary", "Birthday", "Party", "Festival", "Daily Wear", "Special Occasion"];
 export const STYLES = ["Classic", "Modern", "Halo", "Solitaire", "Band", "Stackable", "Contemporary", "Traditional"];
 export const CUTS = ["Excellent", "Very Good", "Good"];
-export const CERTIFICATIONS = ["IGI Certified", "GIA Certified", "SGL Certified", "BIS Hallmarked", "Lab Certified Gemstone"];
+export const CERTIFICATIONS = ["IGI Certified", "GIA Certified", "SGL Certified", "BIS Hallmarked"];
 export const AVAILABILITY = [
   { value: "in_stock", label: "In Stock" },
   { value: "made_to_order", label: "Made To Order" },

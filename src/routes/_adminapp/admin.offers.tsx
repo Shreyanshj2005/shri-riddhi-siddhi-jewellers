@@ -68,7 +68,7 @@ function OffersAdmin() {
         <Card>
           <h2 className="mb-4 font-display text-lg">{editing ? "Edit offer" : "Create offer"}</h2>
           <div className="space-y-4">
-            <Field label="Headline"><Input value={form.title ?? ""} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Flat 25% OFF" /></Field>
+            <Field label="Headline"><Input value={form.title ?? ""} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Flat 2.5% OFF" /></Field>
             <Field label="Badge"><Input value={form.badge ?? ""} onChange={(e) => setForm({ ...form, badge: e.target.value })} placeholder="DIAMOND OFFER" /></Field>
             <Field label="Description"><Textarea value={form.description ?? ""} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Diamond jewellery making charges" /></Field>
             <Field label="Offer image"><div className="space-y-2"><Input value={form.image_url ?? ""} onChange={(e) => setForm({ ...form, image_url: e.target.value })} placeholder="/images/seed/banner-diamond.jpg" /><UploadButton kind="offer" accept="image/jpeg,image/png,image/webp" label="Upload offer image" onUploaded={(files) => { const first = files[0]; if (first) setForm({ ...form, image_url: first.url }); }} /></div></Field>

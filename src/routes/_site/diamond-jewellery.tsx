@@ -5,7 +5,7 @@ export const Route = createFileRoute("/_site/diamond-jewellery")(
   listingRoute({
     routeTo: "/diamond-jewellery",
     title: "Diamond Jewellery",
-    subtitle: "Certified natural and lab-grown diamonds — rings, necklaces, earrings, pendants, bracelets and bangles.",
+    subtitle: "Certified natural diamonds — rings, necklaces, earrings, pendants, bracelets and bangles.",
     heroImage: "/images/seed/hero-poster.jpg",
     fixed: { cat: "diamond-jewellery" },
     diamondMode: true,

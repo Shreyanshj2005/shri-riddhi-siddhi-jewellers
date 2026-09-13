@@ -54,12 +54,12 @@ export interface SeoSettings { title: string; description: string }
 
 export const DEFAULT_CONTACT: ContactSettings = {
   business_name: "Shri Riddhi Siddhi Jewellers",
-  phone: "096530 69612",
+  phone: "8604806461",
   whatsapp: "919653069612",
   address_line1: "Badi Durga Maa Sthal, Chowk, Thatheri Bazaar",
   address_line2: "Khairabad, Sultanpur, Uttar Pradesh 228001",
   hours: "Mon – Sun: 10:30 AM – 8:30 PM",
-  email: "",
+  email: "shririddhisiddhijewellers@gmail.com",
   rating: "5.0",
   review_count: "177+",
 };

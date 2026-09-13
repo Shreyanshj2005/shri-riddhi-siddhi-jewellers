@@ -115,7 +115,7 @@ function HomePage() {
                 <Button asChild variant="outline-luxe" size="lg"><Link to="/diamond-jewellery" search={{ stone: "Solitaire" }}>Solitaires</Link></Button>
               </div>
               <ul className="mt-10 grid grid-cols-3 gap-4 border-t border-border pt-6 text-center">
-                {[["IGI / GIA", "Certified"], ["Natural & Lab", "Grown"], ["D – J", "Colour Range"]].map(([a, b]) => (
+                {[["IGI / GIA", "Certified"], ["Natural ", "Grown"], ["D – J", "Colour Range"]].map(([a, b]) => (
                   <li key={a}><p className="font-serif text-xl">{a}</p><p className="text-[0.62rem] uppercase tracking-[0.2em] text-muted-foreground">{b}</p></li>
                 ))}
               </ul>
@@ -178,20 +178,36 @@ function HomePage() {
       )}
 
       {/* Shop by diamond type */}
-      {vis("shop_by_diamond_type") && (
-        <section className="container-luxe py-20 lg:py-28">
-          <SectionHeading eyebrow="Know Your Diamond" {...sec("shop_by_diamond_type", "Shop By Diamond Type")} />
-          <div className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-4">
-            {DIAMOND_TYPE_CARDS.map((c) => (
-              <Link key={c.label} to="/diamond-jewellery" search={{ dtype: c.dtype, stone: c.stone }} className="group bg-background p-8 transition-colors hover:bg-ink hover:text-ink-foreground">
-                <p className="font-serif text-2xl">{c.label}</p>
-                <p className="mt-2 text-sm text-muted-foreground group-hover:text-ink-muted">{c.blurb}</p>
-                <span className="mt-6 inline-flex items-center gap-2 text-[0.62rem] uppercase tracking-[0.22em] text-gold">Discover <ArrowRight className="h-3 w-3" /></span>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
+{vis("shop_by_diamond_type") && (
+  <section className="container-luxe py-20 lg:py-28">
+    <SectionHeading
+      eyebrow="Know Your Diamond"
+      {...sec("shop_by_diamond_type", "Shop By Diamond Type")}
+    />
+
+    <div className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-3">
+      {DIAMOND_TYPE_CARDS.slice(0, 3).map((c) => (
+        <Link
+          key={c.label}
+          to="/diamond-jewellery"
+          search={{ dtype: c.dtype, stone: c.stone }}
+          className="group bg-background p-8 transition-colors hover:bg-ink hover:text-ink-foreground"
+        >
+          <p className="font-serif text-2xl">{c.label}</p>
+
+          <p className="mt-2 text-sm text-muted-foreground group-hover:text-ink-muted">
+            {c.blurb}
+          </p>
+
+          <span className="mt-6 inline-flex items-center gap-2 text-[0.62rem] uppercase tracking-[0.22em] text-gold">
+            Discover
+            <ArrowRight className="h-3 w-3" />
+          </span>
+        </Link>
+      ))}
+    </div>
+  </section>
+)}
 
       {/* Shop by occasion */}
       {vis("shop_by_occasion") && occasions.length > 0 && (

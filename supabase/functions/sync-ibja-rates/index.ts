@@ -1,46 +1,143 @@
-// Follow this setup guide to integrate the Deno language server with your editor:
-// https://deno.land/manual/getting_started/setup_your_environment
-// This enables autocomplete, go to definition, etc.
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Setup type definitions for built-in Supabase Runtime APIs
-import "@supabase/functions-js/edge-runtime.d.ts";
-import { withSupabase } from "@supabase/server";
+const IBJA_URL = "https://www.ibjarates.com/";
 
-console.log("Hello from Functions!");
+const supabase = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+);
 
-// This endpoint uses 'publishable' | 'secret' access, apiKey is required.
-// Use publishable for Client-facing, key-validated endpoints
-// Use secret for Server-to-server, internal calls
-export default {
-  fetch: withSupabase({ auth: ["publishable", "secret"] }, async (req, ctx) => {
-    // Called by another service with a secret key
-    // ctx.supabaseAdmin bypasses RLS — use for privileged operations
-    /*
-    if (ctx.authMode === "secret") {
-      const { user_id } = await req.json();
-      const { data } = await ctx.supabaseAdmin.auth.admin.getUserById(user_id);
+function parseNumber(value: string): number {
+  return Number(value.replace(/,/g, "").trim());
+}
 
-      return Response.json({
-        email: data?.user?.email,
-      });
+Deno.serve(async () => {
+  try {
+    const response = await fetch(IBJA_URL, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 SRSJ-Rates-Sync/1.0",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`IBJA returned HTTP ${response.status}`);
     }
+
+    const html = await response.text();
+
+    // Convert HTML to readable text
+    const text = html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    /*
+      IBJA table:
+      Date
+      Gold 999
+      Gold 995
+      Gold 916
+      Gold 750
+      Gold 585
+      Silver 999
+
+      Gold = ₹ / 10g
+      Silver = ₹ / kg
+
+      We use the latest available PM row.
     */
 
-    const { name } = await req.json();
+    const rowRegex =
+      /(\d{2}\/\d{2}\/\d{4})\s+([\d,]+(?:\.\d+)?)\s+([\d,]+(?:\.\d+)?)\s+([\d,]+(?:\.\d+)?)\s+([\d,]+(?:\.\d+)?)\s+([\d,]+(?:\.\d+)?)\s+([\d,]+(?:\.\d+)?)/g;
 
-    return Response.json({
-      message: `Hello ${name}!`,
+    const rows = [...text.matchAll(rowRegex)];
+
+    if (rows.length === 0) {
+      throw new Error("Could not find IBJA daily rate rows");
+    }
+
+    // Latest row available on the page.
+    const match = rows[0];
+
+    const [
+      ,
+      rateDate,
+      gold999,
+      gold995,
+      gold916,
+      gold750,
+      gold585,
+      silver999,
+    ] = match;
+
+    const rates = {
+      gold_24k: parseNumber(gold999) / 10,
+      gold_22k: parseNumber(gold916) / 10,
+      gold_18k: parseNumber(gold750) / 10,
+      silver: parseNumber(silver999) / 1000,
+    };
+
+    const syncedAt = new Date().toISOString();
+
+    for (const [key, current_rate] of Object.entries(rates)) {
+      const { error } = await supabase
+        .from("rates")
+        .update({
+          current_rate,
+          source: "IBJA Public Rates",
+          source_updated_at: syncedAt,
+        })
+        .eq("key", key);
+
+      if (error) {
+        throw new Error(
+          `Failed to update ${key}: ${error.message}`,
+        );
+      }
+    }
+
+    console.log("IBJA rates synced:", {
+      rateDate,
+      rates,
+      syncedAt,
     });
-  }),
-};
 
-/* To invoke locally:
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        source: "IBJA Public Rates",
+        rateDate,
+        rates,
+        syncedAt,
+      }),
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      },
+    );
+  } catch (error) {
+    console.error("IBJA sync failed:", error);
 
-  1. Run `supabase start` (see: https://supabase.com/docs/reference/cli/supabase-start)
-  2. Make an HTTP request:
-
-  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/sync-ibja-rates' \
-    --header 'apiKey: sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH' \
-    --data '{"name":"Functions"}'
-
-*/
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      }),
+      {
+        status: 500,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      },
+    );
+  }
+});

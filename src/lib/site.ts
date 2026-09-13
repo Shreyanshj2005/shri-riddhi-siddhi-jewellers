@@ -32,7 +32,7 @@ export const DIAMOND_SUBCATS = [
 
 export const DIAMOND_TYPE_CARDS = [
   { label: "Natural Diamonds", dtype: "Natural Diamond", blurb: "Earth-mined, certified brilliance" },
-  { label: "Lab-Grown Diamonds", dtype: "Lab-Grown Diamond", blurb: "Identical sparkle, conscious choice" },
+  
   { label: "Solitaire", stone: "Solitaire", blurb: "One stone. Infinite meaning." },
   { label: "Diamond + Gemstone", stone: "Diamond + Gemstone", blurb: "Colour meets fire" },
 ];
