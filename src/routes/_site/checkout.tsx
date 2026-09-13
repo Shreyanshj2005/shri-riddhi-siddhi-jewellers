@@ -75,9 +75,19 @@ function CheckoutPage() {
 
   const [loading, setLoading] = useState(false);
 
+  // Coupon states
+  const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState("");
+  const [couponDiscount, setCouponDiscount] = useState(0);
+  const [couponMessage, setCouponMessage] = useState("");
+
   // Load Razorpay Checkout script
   useEffect(() => {
-    if (document.getElementById("razorpay-checkout-script")) {
+    if (
+      document.getElementById(
+        "razorpay-checkout-script",
+      )
+    ) {
       return;
     }
 
@@ -91,6 +101,7 @@ function CheckoutPage() {
     document.body.appendChild(script);
   }, []);
 
+  // Update checkout fields
   const updateField = (
     field: keyof CheckoutForm,
     value: string,
@@ -101,6 +112,43 @@ function CheckoutPage() {
     }));
   };
 
+  // Apply coupon
+  const applyCoupon = () => {
+    const code = couponCode.trim().toUpperCase();
+
+    if (!code) {
+      setCouponMessage(
+        "Please enter a coupon code.",
+      );
+      setAppliedCoupon("");
+      setCouponDiscount(0);
+      return;
+    }
+
+    // RSJ = 5% discount
+    if (code === "RSJ") {
+      const discount =
+        Math.round(
+          ((cartTotal * 5) / 100) * 100,
+        ) / 100;
+
+      setAppliedCoupon("RSJ");
+      setCouponDiscount(discount);
+      setCouponMessage(
+        "Coupon applied successfully!",
+      );
+
+      return;
+    }
+
+    setAppliedCoupon("");
+    setCouponDiscount(0);
+    setCouponMessage(
+      "Invalid coupon code.",
+    );
+  };
+
+  // Submit checkout
   const handleSubmit = async (
     event: React.FormEvent,
   ) => {
@@ -122,49 +170,72 @@ function CheckoutPage() {
 
     try {
       // -----------------------------------------
-      // 1. Create SRSJ order
+      // 1. Create SRSJ customer order
       // -----------------------------------------
 
-      const result = await createCustomerOrder({
-        data: {
-          customer_name: form.name,
-          customer_email:
-            form.email || undefined,
-          customer_phone: form.phone,
+      const result =
+        await createCustomerOrder({
+          data: {
+            customer_name: form.name,
 
-          shipping_address: form.address,
-          shipping_city: form.city,
-          shipping_state: form.state,
-          shipping_pincode: form.pincode,
+            customer_email:
+              form.email || undefined,
 
-          subtotal: cartTotal,
-          shipping_charge: 0,
-          discount: 0,
-          total_amount: cartTotal,
+            customer_phone: form.phone,
 
-          payment_method: "razorpay",
+            shipping_address:
+              form.address,
 
-          items: items.map((item) => ({
-            product_id: item.product.id,
-            product_name: item.product.name,
-            product_slug: item.product.slug,
+            shipping_city: form.city,
 
-            quantity: item.quantity,
+            shipping_state: form.state,
 
-            unit_price: Number(
-              item.product.price,
+            shipping_pincode:
+              form.pincode,
+
+            subtotal: cartTotal,
+
+            shipping_charge: 0,
+
+            discount: couponDiscount,
+
+            total_amount: Math.max(
+              0,
+              cartTotal - couponDiscount,
             ),
 
-            total_price:
-              Number(item.product.price) *
-              item.quantity,
+            payment_method: "razorpay",
 
-            product_image:
-              item.product.image ||
-              undefined,
-          })),
-        },
-      });
+            coupon_code:
+              appliedCoupon || undefined,
+
+            items: items.map((item) => ({
+              product_id:
+                item.product.id,
+
+              product_name:
+                item.product.name,
+
+              product_slug:
+                item.product.slug,
+
+              quantity: item.quantity,
+
+              unit_price: Number(
+                item.product.price,
+              ),
+
+              total_price:
+                Number(
+                  item.product.price,
+                ) * item.quantity,
+
+              product_image:
+                item.product.image ||
+                undefined,
+            })),
+          },
+        });
 
       if (!result?.success) {
         throw new Error(
@@ -598,6 +669,78 @@ function CheckoutPage() {
               </div>
             )}
 
+            {/* Coupon */}
+            <div className="mt-6 border-t pt-6">
+              <label
+                htmlFor="coupon"
+                className="mb-2 block text-sm font-medium"
+              >
+                Coupon Code
+              </label>
+
+              <div className="flex gap-2">
+                <input
+                  id="coupon"
+                  type="text"
+                  value={couponCode}
+                  onChange={(e) => {
+                    setCouponCode(
+                      e.target.value.toUpperCase(),
+                    );
+
+                    if (appliedCoupon) {
+                      setAppliedCoupon("");
+                      setCouponDiscount(0);
+                      setCouponMessage("");
+                    }
+                  }}
+                  placeholder="Enter coupon code"
+                  className="min-w-0 flex-1 rounded-lg border bg-white px-4 py-3 text-sm uppercase outline-none transition focus:border-black"
+                />
+
+                <button
+                  type="button"
+                  onClick={applyCoupon}
+                  className="rounded-lg bg-black px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-800"
+                >
+                  Apply
+                </button>
+              </div>
+
+              {couponMessage && (
+                <p
+                  className={`mt-2 text-sm ${
+                    appliedCoupon
+                      ? "text-green-600"
+                      : "text-red-600"
+                  }`}
+                >
+                  {couponMessage}
+                </p>
+              )}
+
+              {appliedCoupon && (
+                <div className="mt-3 flex items-center justify-between rounded-lg bg-green-50 px-3 py-2 text-sm">
+                  <span className="text-green-700">
+                    Coupon: {appliedCoupon}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAppliedCoupon("");
+                      setCouponDiscount(0);
+                      setCouponMessage("");
+                      setCouponCode("");
+                    }}
+                    className="font-medium text-red-600 hover:underline"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+            </div>
+
             {/* Total */}
             <div className="mt-6 space-y-3 border-t pt-6">
               <div className="flex justify-between text-sm">
@@ -621,14 +764,39 @@ function CheckoutPage() {
                 <span>Free</span>
               </div>
 
+              {couponDiscount > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-green-600">
+                    Coupon Discount (
+                    {appliedCoupon})
+                  </span>
+
+                  <span className="font-medium text-green-600">
+                    - ₹
+                    {couponDiscount.toLocaleString(
+                      "en-IN",
+                      {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      },
+                    )}
+                  </span>
+                </div>
+              )}
+
               <div className="flex justify-between border-t pt-4 text-lg font-semibold">
                 <span>Total</span>
 
                 <span>
                   ₹
-                  {cartTotal.toLocaleString(
-                    "en-IN",
-                  )}
+                  {Math.max(
+                    0,
+                    cartTotal -
+                      couponDiscount,
+                  ).toLocaleString("en-IN", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
                 </span>
               </div>
             </div>

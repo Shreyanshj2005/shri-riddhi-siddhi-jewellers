@@ -532,6 +532,9 @@ export const createCustomerOrder = createServerFn({ method: "POST" })
 
       payment_method: string;
 
+      // Coupon
+      coupon_code?: string;
+
       items: Array<{
         product_id: string;
         product_name: string;
@@ -548,44 +551,169 @@ export const createCustomerOrder = createServerFn({ method: "POST" })
     const { supabase } = context;
 
     // ==========================================
-    // 1. CREATE SRSJ ORDER
+    // 1. VALIDATE COUPON
+    // ==========================================
+
+    const couponCode =
+      data.coupon_code?.trim().toUpperCase() || null;
+
+    let couponDiscount = 0;
+
+    if (couponCode) {
+      const { data: coupon, error: couponError } = await supabase
+        .from("coupons")
+        .select("*")
+        .eq("code", couponCode)
+        .eq("active", true)
+        .maybeSingle();
+
+      if (couponError) {
+        console.error("Coupon lookup failed:", couponError);
+        throw new Error("Unable to validate coupon.");
+      }
+
+      if (!coupon) {
+        throw new Error("Invalid or inactive coupon code.");
+      }
+
+      // Minimum order value
+      if (
+        coupon.min_order_value != null &&
+        Number(data.subtotal) < Number(coupon.min_order_value)
+      ) {
+        throw new Error(
+          `Minimum order value for this coupon is ₹${Number(
+            coupon.min_order_value,
+          ).toFixed(2)}.`,
+        );
+      }
+
+      // Start date
+      if (
+        coupon.starts_at &&
+        new Date(coupon.starts_at).getTime() > Date.now()
+      ) {
+        throw new Error("This coupon is not active yet.");
+      }
+
+      // Expiry date
+      if (
+        coupon.expires_at &&
+        new Date(coupon.expires_at).getTime() < Date.now()
+      ) {
+        throw new Error("This coupon has expired.");
+      }
+
+      // Usage limit
+      if (
+        coupon.usage_limit != null &&
+        Number(coupon.used_count ?? 0) >= Number(coupon.usage_limit)
+      ) {
+        throw new Error("This coupon has reached its usage limit.");
+      }
+
+      // Calculate discount
+      if (coupon.discount_type === "percentage") {
+        couponDiscount =
+          (Number(data.subtotal) *
+            Number(coupon.discount_value)) /
+          100;
+      } else {
+        couponDiscount = Number(coupon.discount_value);
+      }
+
+      // Maximum discount
+      if (coupon.max_discount != null) {
+        couponDiscount = Math.min(
+          couponDiscount,
+          Number(coupon.max_discount),
+        );
+      }
+
+      // Discount cannot exceed subtotal
+      couponDiscount = Math.min(
+        couponDiscount,
+        Number(data.subtotal),
+      );
+
+      // Round to 2 decimals
+      couponDiscount =
+        Math.round(couponDiscount * 100) / 100;
+    }
+
+    // ==========================================
+    // 2. CALCULATE FINAL TOTAL
+    // ==========================================
+
+    const subtotal = Number(data.subtotal);
+    const shippingCharge = Number(data.shipping_charge);
+
+    const finalTotal =
+      Math.max(
+        0,
+        subtotal +
+          shippingCharge -
+          couponDiscount,
+      );
+
+    // ==========================================
+    // 3. CREATE SRSJ ORDER
     // ==========================================
 
     const orderNumber = `SRSJ-${Date.now()}`;
 
-    const { data: order, error: orderError } = await supabase
-      .from("orders")
-      .insert({
-        order_number: orderNumber,
+    const { data: order, error: orderError } =
+      await supabase
+        .from("orders")
+        .insert({
+          order_number: orderNumber,
 
-        customer_name: data.customer_name,
-        customer_email: data.customer_email || null,
-        customer_phone: data.customer_phone,
+          customer_name: data.customer_name,
+          customer_email:
+            data.customer_email || null,
+          customer_phone: data.customer_phone,
 
-        shipping_address: data.shipping_address,
-        shipping_city: data.shipping_city || null,
-        shipping_state: data.shipping_state || null,
-        shipping_pincode: data.shipping_pincode || null,
+          shipping_address: data.shipping_address,
+          shipping_city:
+            data.shipping_city || null,
+          shipping_state:
+            data.shipping_state || null,
+          shipping_pincode:
+            data.shipping_pincode || null,
 
-        subtotal: data.subtotal,
-        shipping_charge: data.shipping_charge,
-        discount: data.discount,
-        total_amount: data.total_amount,
+          subtotal: subtotal,
+          shipping_charge: shippingCharge,
 
-        payment_method: "razorpay",
-        payment_status: "pending",
-        order_status: "pending",
-      })
-      .select("id, order_number")
-      .single();
+          // Existing discount field
+          discount: couponDiscount,
+
+          // Coupon information
+          coupon_code: couponCode,
+          coupon_discount: couponDiscount,
+
+          // Final amount after coupon
+          total_amount: finalTotal,
+
+          payment_method: "razorpay",
+          payment_status: "pending",
+          order_status: "pending",
+        })
+        .select("id, order_number")
+        .single();
 
     if (orderError || !order) {
-      console.error("Order creation failed:", orderError);
-      throw new Error("Unable to create order.");
+      console.error(
+        "Order creation failed:",
+        orderError,
+      );
+
+      throw new Error(
+        "Unable to create order.",
+      );
     }
 
     // ==========================================
-    // 2. SAVE ORDER ITEMS
+    // 4. SAVE ORDER ITEMS
     // ==========================================
 
     const orderItems = data.items.map((item) => ({
@@ -593,18 +721,23 @@ export const createCustomerOrder = createServerFn({ method: "POST" })
 
       product_id: item.product_id,
       product_name: item.product_name,
-      product_slug: item.product_slug || null,
+      product_slug:
+        item.product_slug || null,
 
       quantity: item.quantity,
+
       unit_price: item.unit_price,
+
       total_price: item.total_price,
 
-      product_image: item.product_image || null,
+      product_image:
+        item.product_image || null,
     }));
 
-    const { error: itemsError } = await supabase
-      .from("order_items")
-      .insert(orderItems);
+    const { error: itemsError } =
+      await supabase
+        .from("order_items")
+        .insert(orderItems);
 
     if (itemsError) {
       console.error(
@@ -618,17 +751,25 @@ export const createCustomerOrder = createServerFn({ method: "POST" })
         .delete()
         .eq("id", order.id);
 
-      throw new Error("Unable to save order items.");
+      throw new Error(
+        "Unable to save order items.",
+      );
     }
 
     // ==========================================
-    // 3. RAZORPAY ENVIRONMENT VARIABLES
+    // 5. RAZORPAY ENVIRONMENT VARIABLES
     // ==========================================
 
-    const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
-    const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
+    const razorpayKeyId =
+      process.env.RAZORPAY_KEY_ID;
 
-    if (!razorpayKeyId || !razorpayKeySecret) {
+    const razorpayKeySecret =
+      process.env.RAZORPAY_KEY_SECRET;
+
+    if (
+      !razorpayKeyId ||
+      !razorpayKeySecret
+    ) {
       console.error(
         "Razorpay environment variables are missing.",
       );
@@ -639,7 +780,7 @@ export const createCustomerOrder = createServerFn({ method: "POST" })
     }
 
     // ==========================================
-    // 4. CREATE RAZORPAY INSTANCE
+    // 6. CREATE RAZORPAY INSTANCE
     // ==========================================
 
     const razorpay = new Razorpay({
@@ -648,30 +789,47 @@ export const createCustomerOrder = createServerFn({ method: "POST" })
     });
 
     // ==========================================
-    // 5. CREATE RAZORPAY ORDER
-    // Amount must be in paise
+    // 7. CREATE RAZORPAY ORDER
     // ==========================================
 
-    const razorpayOrder = await razorpay.orders.create({
-      amount: Math.round(data.total_amount * 100),
-      currency: "INR",
+    // IMPORTANT:
+    // Razorpay amount is based on FINAL TOTAL
+    // after coupon discount.
 
-      receipt: order.order_number,
+    const razorpayOrder =
+      await razorpay.orders.create({
+        amount: Math.round(
+          finalTotal * 100,
+        ),
 
-      notes: {
-        srsj_order_id: order.id,
-        order_number: order.order_number,
-      },
-    });
+        currency: "INR",
+
+        receipt: order.order_number,
+
+        notes: {
+          srsj_order_id: order.id,
+          order_number:
+            order.order_number,
+
+          coupon_code:
+            couponCode || "NONE",
+
+          coupon_discount:
+            couponDiscount.toFixed(2),
+        },
+      });
 
     // ==========================================
-    // 6. SAVE RAZORPAY ORDER ID
+    // 8. SAVE RAZORPAY ORDER ID
     // ==========================================
 
-    const { error: razorpaySaveError } = await supabase
+    const {
+      error: razorpaySaveError,
+    } = await supabase
       .from("orders")
       .update({
-        razorpay_order_id: razorpayOrder.id,
+        razorpay_order_id:
+          razorpayOrder.id,
       })
       .eq("id", order.id);
 
@@ -687,21 +845,36 @@ export const createCustomerOrder = createServerFn({ method: "POST" })
     }
 
     // ==========================================
-    // 7. RETURN DATA TO CHECKOUT PAGE
+    // 9. RETURN DATA TO CHECKOUT
     // ==========================================
 
     return {
       success: true,
 
       orderId: order.id,
-      orderNumber: order.order_number,
 
-      razorpayOrderId: razorpayOrder.id,
+      orderNumber:
+        order.order_number,
 
-      // Public Razorpay Key ID
+      razorpayOrderId:
+        razorpayOrder.id,
+
       razorpayKeyId,
 
-      amount: razorpayOrder.amount,
-      currency: razorpayOrder.currency,
+      // Razorpay amount in paise
+      amount:
+        razorpayOrder.amount,
+
+      currency:
+        razorpayOrder.currency,
+
+      // Useful for checkout UI
+      subtotal,
+
+      couponCode,
+
+      couponDiscount,
+
+      finalTotal,
     };
   });

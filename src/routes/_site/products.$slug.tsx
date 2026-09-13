@@ -1,21 +1,34 @@
 import {
   Check,
+  ChevronLeft,
   ChevronRight,
   Copy,
   Heart,
   MapPin,
+  Maximize2,
   MessageCircle,
+  Minus,
   Phone,
+  Plus,
+  RotateCcw,
   Share2,
   ShoppingBag,
   Star,
+  Video,
+  X,
+  ZoomIn,
 } from "lucide-react";
+
 import {
   Link,
   notFound,
   createFileRoute,
 } from "@tanstack/react-router";
-import { useState } from "react";
+
+import {
+  useState,
+  type WheelEvent,
+} from "react";
 
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -23,11 +36,17 @@ import { useWishlist } from "@/lib/wishlist";
 import { useCart } from "@/context/CartContext";
 import { productQuery } from "@/lib/catalog.functions";
 
-export const Route = createFileRoute("/_site/products/$slug")({
-  loader: async ({ context, params }) => {
-    const data = await context.queryClient.ensureQueryData(
-      productQuery(params.slug),
-    );
+export const Route = createFileRoute(
+  "/_site/products/$slug",
+)({
+  loader: async ({
+    context,
+    params,
+  }) => {
+    const data =
+      await context.queryClient.ensureQueryData(
+        productQuery(params.slug),
+      );
 
     if (!data.product) {
       throw notFound();
@@ -43,7 +62,8 @@ export const Route = createFileRoute("/_site/products/$slug")({
 
 function ProductPage() {
   const { slug } = Route.useParams();
-  const { product } = Route.useLoaderData();
+  const { product } =
+    Route.useLoaderData();
 
   return (
     <ProductView
@@ -60,44 +80,195 @@ function ProductView({
   product: any;
   slug: string;
 }) {
-  const { addToCart, isInCart } = useCart();
+  const { addToCart, isInCart } =
+    useCart();
 
-  // IMPORTANT:
-  // useWishlist() returns:
-  // { ids, toggle, has, clear, count }
-  const { toggle, has } = useWishlist();
+  const { toggle, has } =
+    useWishlist();
 
-  const [selectedImage, setSelectedImage] = useState(0);
+  const [
+    selectedImage,
+    setSelectedImage,
+  ] = useState(0);
 
-  const images = Array.isArray(p.images) ? p.images : [];
+  // =========================================================
+  // ZOOM STATES
+  // =========================================================
+
+  const [
+    isZoomOpen,
+    setIsZoomOpen,
+  ] = useState(false);
+
+  const [
+    zoomLevel,
+    setZoomLevel,
+  ] = useState(1);
+
+  // =========================================================
+  // VIDEO CALL MODAL STATE
+  // =========================================================
+
+  const [
+    isVideoCallOpen,
+    setIsVideoCallOpen,
+  ] = useState(false);
+
+  const images = Array.isArray(
+    p.images,
+  )
+    ? p.images
+    : [];
 
   const currentImage =
     images[selectedImage]?.url ??
     images[0]?.url ??
     "/images/placeholder-jewellery.jpg";
 
-  const alreadyInCart = isInCart(p.id);
+  const alreadyInCart =
+    isInCart(p.id);
 
-  // Check wishlist status using the actual hook function.
   const wishlisted = has(p.id);
 
-  /*
-   * Calculate discount from original_price and current price.
-   * We do NOT use discount_pct because that column does not exist.
-   */
+  // =========================================================
+  // DISCOUNT
+  // =========================================================
+
   const discountPct =
     p.original_price &&
-    Number(p.original_price) > Number(p.price)
+    Number(p.original_price) >
+      Number(p.price)
       ? Math.round(
-          ((Number(p.original_price) - Number(p.price)) /
-            Number(p.original_price)) *
+          ((Number(
+            p.original_price,
+          ) -
+            Number(p.price)) /
+            Number(
+              p.original_price,
+            )) *
             100,
         )
       : 0;
 
+  // =========================================================
+  // ZOOM FUNCTIONS
+  // =========================================================
+
+  const openZoom = () => {
+    setZoomLevel(1);
+    setIsZoomOpen(true);
+  };
+
+  const closeZoom = () => {
+    setIsZoomOpen(false);
+    setZoomLevel(1);
+  };
+
+  const zoomIn = () => {
+    setZoomLevel((current) =>
+      Math.min(
+        Number(
+          (
+            current + 0.25
+          ).toFixed(2),
+        ),
+        3,
+      ),
+    );
+  };
+
+  const zoomOut = () => {
+    setZoomLevel((current) =>
+      Math.max(
+        Number(
+          (
+            current - 0.25
+          ).toFixed(2),
+        ),
+        1,
+      ),
+    );
+  };
+
+  const resetZoom = () => {
+    setZoomLevel(1);
+  };
+
+  const handleImageWheel = (
+    event: WheelEvent<HTMLDivElement>,
+  ) => {
+    event.preventDefault();
+
+    if (event.deltaY < 0) {
+      setZoomLevel((current) =>
+        Math.min(
+          Number(
+            (
+              current + 0.2
+            ).toFixed(2),
+          ),
+          3,
+        ),
+      );
+    } else {
+      setZoomLevel((current) =>
+        Math.max(
+          Number(
+            (
+              current - 0.2
+            ).toFixed(2),
+          ),
+          1,
+        ),
+      );
+    }
+  };
+
+  // =========================================================
+  // PREVIOUS / NEXT IMAGE
+  // =========================================================
+
+  const showPreviousImage = () => {
+    if (images.length <= 1)
+      return;
+
+    setSelectedImage(
+      (current) =>
+        current === 0
+          ? images.length - 1
+          : current - 1,
+    );
+
+    setZoomLevel(1);
+  };
+
+  const showNextImage = () => {
+    if (images.length <= 1)
+      return;
+
+    setSelectedImage(
+      (current) =>
+        current ===
+        images.length - 1
+          ? 0
+          : current + 1,
+    );
+
+    setZoomLevel(1);
+  };
+
+  // =========================================================
+  // ADD TO CART
+  // =========================================================
+
   const handleAddToCart = () => {
-    if (p.stock_status === "out_of_stock") {
-      toast.error("This product is currently out of stock.");
+    if (
+      p.stock_status ===
+      "out_of_stock"
+    ) {
+      toast.error(
+        "This product is currently out of stock.",
+      );
       return;
     }
 
@@ -106,18 +277,27 @@ function ProductView({
       name: p.name,
       slug: p.slug,
       price: Number(p.price),
-      image: images[0]?.url ?? "",
+      image:
+        images[0]?.url ?? "",
       metal: p.metal ?? "",
       purity: p.purity ?? "",
     });
 
-    toast.success("Added to cart", {
-      description: `${p.name} has been added to your cart.`,
-    });
+    toast.success(
+      "Added to cart",
+      {
+        description: `${p.name} has been added to your cart.`,
+      },
+    );
   };
 
+  // =========================================================
+  // WISHLIST
+  // =========================================================
+
   const handleWishlist = () => {
-    const wasWishlisted = has(p.id);
+    const wasWishlisted =
+      has(p.id);
 
     toggle(p.id);
 
@@ -128,47 +308,96 @@ function ProductView({
     );
   };
 
+  // =========================================================
+  // SHARE
+  // =========================================================
+
   const handleShare = async () => {
     try {
       if (navigator.share) {
         await navigator.share({
           title: p.name,
           text: `Check out ${p.name}`,
-          url: window.location.href,
+          url: window.location
+            .href,
         });
       } else {
         await navigator.clipboard.writeText(
           window.location.href,
         );
 
-        toast.success("Product link copied");
+        toast.success(
+          "Product link copied",
+        );
       }
     } catch {
       // User cancelled sharing.
     }
   };
 
-  const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(
-        window.location.href,
-      );
+  // =========================================================
+  // COPY LINK
+  // =========================================================
 
-      toast.success("Product link copied");
-    } catch {
-      toast.error("Unable to copy product link");
-    }
+  const handleCopyLink =
+    async () => {
+      try {
+        await navigator.clipboard.writeText(
+          window.location.href,
+        );
+
+        toast.success(
+          "Product link copied",
+        );
+      } catch {
+        toast.error(
+          "Unable to copy product link",
+        );
+      }
+    };
+
+  // =========================================================
+  // WHATSAPP MESSAGE
+  // =========================================================
+
+  const whatsappMessage =
+    encodeURIComponent(
+      `Hello, I am interested in ${p.name}.\n\nI would like a video consultation with a jeweller.\n\nProduct link: ${window.location.href}`,
+    );
+
+  // =========================================================
+  // OPEN VIDEO CALL MODAL
+  // =========================================================
+
+  const openVideoCall = () => {
+    setIsVideoCallOpen(true);
   };
 
-  const whatsappMessage = encodeURIComponent(
-    `Hello, I am interested in ${p.name}. Product link: ${window.location.href}`,
-  );
+  const closeVideoCall = () => {
+    setIsVideoCallOpen(false);
+  };
+
+  // =========================================================
+  // START WHATSAPP CONSULTATION
+  // =========================================================
+
+  const handleWhatsAppVideo =
+    () => {
+      window.open(
+        `https://wa.me/919653069612?text=${whatsappMessage}`,
+        "_blank",
+        "noopener,noreferrer",
+      );
+
+      setIsVideoCallOpen(false);
+    };
 
   return (
     <main className="min-h-screen bg-background">
       {/* =========================================================
           BREADCRUMB
       ========================================================== */}
+
       <div className="container mx-auto px-4 py-5">
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <Link
@@ -181,7 +410,8 @@ function ProductView({
           <ChevronRight className="h-4 w-4" />
 
           <span>
-            {p.category?.name ?? "Jewellery"}
+            {p.category?.name ??
+              "Jewellery"}
           </span>
 
           <ChevronRight className="h-4 w-4" />
@@ -195,36 +425,124 @@ function ProductView({
       {/* =========================================================
           PRODUCT SECTION
       ========================================================== */}
+
       <section className="container mx-auto px-4 pb-16">
         <div className="grid gap-10 lg:grid-cols-2">
           {/* =====================================================
               PRODUCT IMAGES
           ====================================================== */}
+
           <div>
-            <div className="overflow-hidden rounded-2xl border bg-muted">
-              <img
-                src={currentImage}
-                alt={p.name}
-                className="aspect-square w-full object-cover"
-              />
+            {/* MAIN IMAGE */}
+            <div className="group relative overflow-hidden rounded-2xl border bg-muted">
+              {/* Zoom button */}
+              <button
+                type="button"
+                onClick={
+                  openZoom
+                }
+                aria-label="Zoom product image"
+                className="absolute right-4 top-4 z-10 flex h-11 w-11 items-center justify-center rounded-full border bg-white/90 text-gray-800 shadow-md backdrop-blur transition hover:scale-105 hover:bg-white"
+              >
+                <ZoomIn className="h-5 w-5" />
+              </button>
+
+              {/* Fullscreen button */}
+              <button
+                type="button"
+                onClick={
+                  openZoom
+                }
+                aria-label="View product image fullscreen"
+                className="absolute bottom-4 right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full border bg-white/90 text-gray-800 opacity-0 shadow-md backdrop-blur transition group-hover:opacity-100 hover:bg-white"
+              >
+                <Maximize2 className="h-4 w-4" />
+              </button>
+
+              {/* Click image to zoom */}
+              <button
+                type="button"
+                onClick={
+                  openZoom
+                }
+                className="block w-full cursor-zoom-in"
+                aria-label="Open large product image"
+              >
+                <img
+                  src={currentImage}
+                  alt={p.name}
+                  className="aspect-square w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                />
+              </button>
+
+              {/* Previous image */}
+              {images.length >
+                1 && (
+                <button
+                  type="button"
+                  onClick={
+                    showPreviousImage
+                  }
+                  aria-label="Previous product image"
+                  className="absolute left-4 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border bg-white/90 text-gray-800 shadow-md backdrop-blur transition hover:scale-105 hover:bg-white"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+              )}
+
+              {/* Next image */}
+              {images.length >
+                1 && (
+                <button
+                  type="button"
+                  onClick={
+                    showNextImage
+                  }
+                  aria-label="Next product image"
+                  className="absolute right-4 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border bg-white/90 text-gray-800 shadow-md backdrop-blur transition hover:scale-105 hover:bg-white"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+              )}
             </div>
 
-            {/* Thumbnails */}
-            {images.length > 1 && (
+            {/* Zoom hint */}
+            <p className="mt-3 text-center text-xs text-muted-foreground">
+              Click the image to zoom
+            </p>
+
+            {/* =================================================
+                THUMBNAILS
+            ================================================== */}
+
+            {images.length >
+              1 && (
               <div className="mt-4 grid grid-cols-5 gap-3">
                 {images.map(
-                  (image: any, index: number) => (
+                  (
+                    image: any,
+                    index: number,
+                  ) => (
                     <button
-                      key={image.id ?? index}
-                      type="button"
-                      onClick={() =>
-                        setSelectedImage(index)
+                      key={
+                        image.id ??
+                        index
                       }
+                      type="button"
+                      onClick={() => {
+                        setSelectedImage(
+                          index,
+                        );
+                        setZoomLevel(
+                          1,
+                        );
+                      }}
                       aria-label={`View image ${
                         index + 1
                       }`}
                       className={`overflow-hidden rounded-xl border-2 transition ${
-                        selectedImage === index
+                        selectedImage ===
+                        index
                           ? "border-primary"
                           : "border-transparent hover:border-border"
                       }`}
@@ -233,7 +551,9 @@ function ProductView({
                         src={image.url}
                         alt={
                           image.alt ??
-                          `${p.name} image ${index + 1}`
+                          `${p.name} image ${
+                            index + 1
+                          }`
                         }
                         className="aspect-square w-full object-cover"
                       />
@@ -247,6 +567,7 @@ function ProductView({
           {/* =====================================================
               PRODUCT INFORMATION
           ====================================================== */}
+
           <div className="flex flex-col">
             {/* New badge */}
             {p.is_new && (
@@ -267,19 +588,17 @@ function ProductView({
               </p>
             )}
 
-            {/* =================================================
-                RATING
-            ================================================== */}
+            {/* Rating */}
             <div className="mt-4 flex items-center gap-2">
               <div className="flex">
-                {Array.from({ length: 5 }).map(
-                  (_, index) => (
-                    <Star
-                      key={index}
-                      className="h-4 w-4 fill-current text-primary"
-                    />
-                  ),
-                )}
+                {Array.from({
+                  length: 5,
+                }).map((_, index) => (
+                  <Star
+                    key={index}
+                    className="h-4 w-4 fill-current text-primary"
+                  />
+                ))}
               </div>
 
               <span className="text-sm text-muted-foreground">
@@ -287,32 +606,41 @@ function ProductView({
               </span>
             </div>
 
-            {/* =================================================
-                PRICE
-            ================================================== */}
+            {/* Price */}
             <div className="mt-6">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="text-3xl font-semibold">
                   ₹
-                  {Number(p.price).toLocaleString(
+                  {Number(
+                    p.price,
+                  ).toLocaleString(
                     "en-IN",
                   )}
                 </span>
 
                 {p.original_price &&
-                  Number(p.original_price) >
-                    Number(p.price) && (
+                  Number(
+                    p.original_price,
+                  ) >
+                    Number(
+                      p.price,
+                    ) && (
                     <>
                       <span className="text-lg text-muted-foreground line-through">
                         ₹
                         {Number(
                           p.original_price,
-                        ).toLocaleString("en-IN")}
+                        ).toLocaleString(
+                          "en-IN",
+                        )}
                       </span>
 
-                      {discountPct > 0 && (
+                      {discountPct >
+                        0 && (
                         <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-700">
-                          {discountPct}% OFF
+                          {
+                            discountPct
+                          }% OFF
                         </span>
                       )}
                     </>
@@ -326,9 +654,7 @@ function ProductView({
               )}
             </div>
 
-            {/* =================================================
-                BASIC PRODUCT DETAILS
-            ================================================== */}
+            {/* Basic Details */}
             <div className="mt-8 grid grid-cols-2 gap-4 border-y py-6">
               {p.metal && (
                 <div>
@@ -373,7 +699,10 @@ function ProductView({
                   </p>
 
                   <p className="mt-1 font-medium">
-                    {p.product_weight} g
+                    {
+                      p.product_weight
+                    }{" "}
+                    g
                   </p>
                 </div>
               )}
@@ -403,9 +732,7 @@ function ProductView({
               )}
             </div>
 
-            {/* =================================================
-                DIAMOND DETAILS
-            ================================================== */}
+            {/* Diamond Details */}
             {(p.diamond_type ||
               p.diamond_carat ||
               p.diamond_shape ||
@@ -428,7 +755,9 @@ function ProductView({
                       </p>
 
                       <p className="font-medium">
-                        {p.diamond_type}
+                        {
+                          p.diamond_type
+                        }
                       </p>
                     </div>
                   )}
@@ -440,7 +769,10 @@ function ProductView({
                       </p>
 
                       <p className="font-medium">
-                        {p.diamond_carat} ct
+                        {
+                          p.diamond_carat
+                        }{" "}
+                        ct
                       </p>
                     </div>
                   )}
@@ -452,7 +784,9 @@ function ProductView({
                       </p>
 
                       <p className="font-medium">
-                        {p.diamond_shape}
+                        {
+                          p.diamond_shape
+                        }
                       </p>
                     </div>
                   )}
@@ -464,7 +798,9 @@ function ProductView({
                       </p>
 
                       <p className="font-medium">
-                        {p.diamond_colour}
+                        {
+                          p.diamond_colour
+                        }
                       </p>
                     </div>
                   )}
@@ -476,7 +812,9 @@ function ProductView({
                       </p>
 
                       <p className="font-medium">
-                        {p.diamond_clarity}
+                        {
+                          p.diamond_clarity
+                        }
                       </p>
                     </div>
                   )}
@@ -500,7 +838,9 @@ function ProductView({
                       </p>
 
                       <p className="font-medium">
-                        {p.certification}
+                        {
+                          p.certification
+                        }
                       </p>
                     </div>
                   )}
@@ -512,7 +852,9 @@ function ProductView({
                       </p>
 
                       <p className="font-medium">
-                        {p.num_stones}
+                        {
+                          p.num_stones
+                        }
                       </p>
                     </div>
                   )}
@@ -524,7 +866,10 @@ function ProductView({
                       </p>
 
                       <p className="font-medium">
-                        {p.total_diamond_weight} ct
+                        {
+                          p.total_diamond_weight
+                        }{" "}
+                        ct
                       </p>
                     </div>
                   )}
@@ -532,9 +877,7 @@ function ProductView({
               </div>
             )}
 
-            {/* =================================================
-                DESCRIPTION
-            ================================================== */}
+            {/* Description */}
             {p.description && (
               <div className="mt-8">
                 <h2 className="font-serif text-xl">
@@ -550,9 +893,10 @@ function ProductView({
             {/* =================================================
                 CART + WISHLIST
             ================================================== */}
+
             <div className="mt-8 space-y-3">
-              {/* Out of stock */}
-              {p.stock_status === "out_of_stock" ? (
+              {p.stock_status ===
+              "out_of_stock" ? (
                 <Button
                   variant="outline"
                   size="xl"
@@ -577,7 +921,9 @@ function ProductView({
                 <Button
                   variant="gold"
                   size="xl"
-                  onClick={handleAddToCart}
+                  onClick={
+                    handleAddToCart
+                  }
                   className="w-full"
                 >
                   <ShoppingBag className="h-5 w-5" />
@@ -590,7 +936,9 @@ function ProductView({
                 type="button"
                 variant="outline"
                 size="xl"
-                onClick={handleWishlist}
+                onClick={
+                  handleWishlist
+                }
                 className="w-full"
               >
                 <Heart
@@ -605,11 +953,28 @@ function ProductView({
                   ? "Remove From Wishlist"
                   : "Add To Wishlist"}
               </Button>
+
+              {/* =================================================
+                  VIDEO CALL BUTTON
+              ================================================== */}
+
+              <Button
+                type="button"
+                size="xl"
+                onClick={
+                  openVideoCall
+                }
+                className="w-full border border-primary bg-primary text-primary-foreground shadow-sm transition hover:bg-primary/90"
+              >
+                <Video className="h-5 w-5" />
+                Video Call With Jeweller
+              </Button>
             </div>
 
             {/* =================================================
                 CONTACT ACTIONS
             ================================================== */}
+
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
               {/* WhatsApp */}
               <Button
@@ -653,15 +1018,15 @@ function ProductView({
               </Button>
             </div>
 
-            {/* =================================================
-                SHARE
-            ================================================== */}
+            {/* Share */}
             <div className="mt-6 flex gap-2">
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={handleShare}
+                onClick={
+                  handleShare
+                }
               >
                 <Share2 className="h-4 w-4" />
                 Share
@@ -671,31 +1036,37 @@ function ProductView({
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={handleCopyLink}
+                onClick={
+                  handleCopyLink
+                }
               >
                 <Copy className="h-4 w-4" />
                 Copy Link
               </Button>
             </div>
 
-            {/* =================================================
-                BENEFITS
-            ================================================== */}
+            {/* Benefits */}
             <div className="mt-8 space-y-3 rounded-2xl border p-5">
               <div className="flex items-center gap-3">
                 <Check className="h-5 w-5 text-primary" />
-                <span>Certified jewellery</span>
-              </div>
 
-              <div className="flex items-center gap-3">
-                <Check className="h-5 w-5 text-primary" />
                 <span>
-                  Premium showroom experience
+                  Certified jewellery
                 </span>
               </div>
 
               <div className="flex items-center gap-3">
                 <Check className="h-5 w-5 text-primary" />
+
+                <span>
+                  Premium showroom
+                  experience
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Check className="h-5 w-5 text-primary" />
+
                 <span>
                   Secure online enquiry
                 </span>
@@ -704,6 +1075,343 @@ function ProductView({
           </div>
         </div>
       </section>
+
+      {/* =========================================================
+          VIDEO CALL MODAL
+      ========================================================== */}
+
+      {isVideoCallOpen && (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={
+            closeVideoCall
+          }
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="video-call-title"
+            className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
+            onClick={(event) =>
+              event.stopPropagation()
+            }
+          >
+            {/* Modal Header */}
+            <div className="relative bg-black px-6 py-7 text-white">
+              <button
+                type="button"
+                onClick={
+                  closeVideoCall
+                }
+                aria-label="Close video call modal"
+                className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 transition hover:bg-white/20"
+              >
+                <X className="h-5 w-5" />
+              </button>
+
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10">
+                <Video className="h-7 w-7" />
+              </div>
+
+              <h2
+                id="video-call-title"
+                className="mt-5 font-serif text-2xl"
+              >
+                Video Consultation
+              </h2>
+
+              <p className="mt-2 text-sm text-white/70">
+                Speak directly with our
+                jewellery expert.
+              </p>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6">
+              {/* Product */}
+              <div className="mb-6 flex gap-4 rounded-2xl border bg-gray-50 p-4">
+                <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-gray-100">
+                  <img
+                    src={currentImage}
+                    alt={p.name}
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <p className="text-xs uppercase tracking-wide text-gray-500">
+                    Interested in
+                  </p>
+
+                  <p className="mt-1 line-clamp-2 font-medium">
+                    {p.name}
+                  </p>
+
+                  <p className="mt-1 text-sm text-gray-500">
+                    ₹
+                    {Number(
+                      p.price,
+                    ).toLocaleString(
+                      "en-IN",
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {/* WhatsApp Video */}
+              <button
+                type="button"
+                onClick={
+                  handleWhatsAppVideo
+                }
+                className="flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition hover:bg-gray-50"
+              >
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-green-100 text-green-700">
+                  <Video className="h-6 w-6" />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold">
+                    WhatsApp Video Call
+                  </p>
+
+                  <p className="mt-1 text-sm text-gray-500">
+                    Contact the jeweller on
+                    WhatsApp and start a
+                    video call.
+                  </p>
+                </div>
+
+                <ChevronRight className="h-5 w-5 text-gray-400" />
+              </button>
+
+              {/* Phone Call */}
+              <a
+                href="tel:+919653069612"
+                onClick={
+                  closeVideoCall
+                }
+                className="mt-3 flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition hover:bg-gray-50"
+              >
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gray-100">
+                  <Phone className="h-6 w-6" />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold">
+                    Call Showroom
+                  </p>
+
+                  <p className="mt-1 text-sm text-gray-500">
+                    Speak with our jewellery
+                    team directly.
+                  </p>
+                </div>
+
+                <ChevronRight className="h-5 w-5 text-gray-400" />
+              </a>
+
+              {/* WhatsApp Enquiry */}
+              <a
+                href={`https://wa.me/919653069612?text=${encodeURIComponent(
+                  `Hello, I want to book a video consultation for ${p.name}. Product link: ${window.location.href}`,
+                )}`}
+                target="_blank"
+                rel="noreferrer"
+                onClick={
+                  closeVideoCall
+                }
+                className="mt-3 flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition hover:bg-gray-50"
+              >
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gray-100">
+                  <MessageCircle className="h-6 w-6" />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold">
+                    Request Consultation
+                  </p>
+
+                  <p className="mt-1 text-sm text-gray-500">
+                    Send a message to arrange
+                    a suitable time.
+                  </p>
+                </div>
+
+                <ChevronRight className="h-5 w-5 text-gray-400" />
+              </a>
+
+              <p className="mt-5 text-center text-xs leading-5 text-gray-500">
+                Video calls are handled through
+                WhatsApp. Please allow camera
+                and microphone permissions when
+                starting the call.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          ZOOM / LIGHTBOX MODAL
+      ========================================================== */}
+
+      {isZoomOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm"
+          onClick={
+            closeZoom
+          }
+        >
+          {/* Close */}
+          <button
+            type="button"
+            onClick={
+              closeZoom
+            }
+            aria-label="Close image viewer"
+            className="absolute right-5 top-5 z-[110] flex h-11 w-11 items-center justify-center rounded-full bg-white text-black shadow-lg transition hover:scale-105"
+          >
+            <X className="h-5 w-5" />
+          </button>
+
+          {/* Counter */}
+          {images.length >
+            1 && (
+            <div className="absolute left-1/2 top-5 z-[110] -translate-x-1/2 rounded-full bg-white/90 px-4 py-2 text-sm font-medium text-black">
+              {selectedImage +
+                1}{" "}
+              / {images.length}
+            </div>
+          )}
+
+          {/* Zoom controls */}
+          <div className="absolute bottom-5 left-1/2 z-[110] flex -translate-x-1/2 items-center gap-2 rounded-full bg-white p-2 shadow-xl">
+            <button
+              type="button"
+              onClick={(
+                event,
+              ) => {
+                event.stopPropagation();
+                zoomOut();
+              }}
+              disabled={
+                zoomLevel <= 1
+              }
+              aria-label="Zoom out"
+              className="flex h-10 w-10 items-center justify-center rounded-full transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Minus className="h-5 w-5" />
+            </button>
+
+            <span className="min-w-[55px] text-center text-sm font-medium">
+              {Math.round(
+                zoomLevel *
+                  100,
+              )}
+              %
+            </span>
+
+            <button
+              type="button"
+              onClick={(
+                event,
+              ) => {
+                event.stopPropagation();
+                zoomIn();
+              }}
+              disabled={
+                zoomLevel >= 3
+              }
+              aria-label="Zoom in"
+              className="flex h-10 w-10 items-center justify-center rounded-full transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Plus className="h-5 w-5" />
+            </button>
+
+            <div className="mx-1 h-6 w-px bg-gray-200" />
+
+            <button
+              type="button"
+              onClick={(
+                event,
+              ) => {
+                event.stopPropagation();
+                resetZoom();
+              }}
+              aria-label="Reset zoom"
+              className="flex h-10 w-10 items-center justify-center rounded-full transition hover:bg-gray-100"
+            >
+              <RotateCcw className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Previous */}
+          {images.length >
+            1 && (
+            <button
+              type="button"
+              onClick={(
+                event,
+              ) => {
+                event.stopPropagation();
+                showPreviousImage();
+              }}
+              aria-label="Previous image"
+              className="absolute left-4 top-1/2 z-[110] flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white text-black shadow-lg transition hover:scale-105"
+            >
+              <ChevronLeft className="h-6 w-6" />
+            </button>
+          )}
+
+          {/* Next */}
+          {images.length >
+            1 && (
+            <button
+              type="button"
+              onClick={(
+                event,
+              ) => {
+                event.stopPropagation();
+                showNextImage();
+              }}
+              aria-label="Next image"
+              className="absolute right-4 top-1/2 z-[110] flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white text-black shadow-lg transition hover:scale-105"
+            >
+              <ChevronRight className="h-6 w-6" />
+            </button>
+          )}
+
+          {/* Zoom image */}
+          <div
+            className="flex h-full w-full items-center justify-center overflow-hidden"
+            onClick={(
+              event,
+            ) =>
+              event.stopPropagation()
+            }
+            onWheel={
+              handleImageWheel
+            }
+          >
+            <img
+              src={currentImage}
+              alt={p.name}
+              draggable={false}
+              className="max-h-[85vh] max-w-[90vw] select-none object-contain transition-transform duration-200"
+              style={{
+                transform: `scale(${zoomLevel})`,
+              }}
+            />
+          </div>
+
+          {/* Hint */}
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 text-center text-xs text-white/80">
+            Use + / − or mouse wheel
+            to zoom
+          </div>
+        </div>
+      )}
     </main>
   );
 }

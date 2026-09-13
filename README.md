@@ -375,7 +375,7 @@ DIAMOND TYPE
 
 Natural Diamond
 
-Lab-Grown Diamond
+Diamond
 
 Solitaire
 
@@ -1664,7 +1664,7 @@ Create:
 
 Natural Diamonds
 
-Lab-Grown Diamonds
+ Diamonds
 
 Solitaire
 

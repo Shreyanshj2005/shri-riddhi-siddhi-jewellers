@@ -371,7 +371,7 @@ create policy "Admins write audit" on public.audit_logs for insert to authentica
 -- ========== SEED DATA ==========
 insert into public.categories (name, slug, "group", sort_order, description) values
  ('Gold Jewellery','gold-jewellery','material',1,'Timeless 22K & 18K gold designs'),
- ('Diamond Jewellery','diamond-jewellery','material',2,'Certified natural & lab-grown diamonds'),
+ ('Diamond Jewellery','diamond-jewellery','material',2,'Certified natural  diamonds'),
  ('Solitaire Jewellery','solitaire-jewellery','material',3,'Single-stone statements'),
  ('Gemstone Jewellery','gemstone-jewellery','material',4,'Ruby, emerald, sapphire & pearl'),
  ('Bridal Jewellery','bridal-jewellery','material',5,'Heirloom sets for the big day'),
@@ -429,7 +429,7 @@ insert into public.homepage_sections (key, title, subtitle, sort_order) values
  ('shop_diamond_jewellery','Shop Diamond Jewellery','Rings, necklaces, earrings, pendants, bracelets and bangles',2),
  ('diamond_favourites','Diamond Favourites','Our most admired diamond pieces',3),
  ('shop_by_price','Shop By Price','Find the perfect piece within your budget',4),
- ('shop_by_diamond_type','Shop By Diamond Type','Natural, lab-grown, solitaire and diamond with gemstones',5),
+ ('shop_by_diamond_type','Shop By Diamond Type','Natural,solitaire and diamond with gemstones',5),
  ('shop_by_occasion','Shop By Occasion','Jewellery for every celebration',6),
  ('best_sellers','Best Selling Diamonds','Loved by our customers',7),
  ('solitaire','Solitaire Collection','One stone. Infinite meaning.',8),
@@ -448,5 +448,5 @@ insert into public.settings (key, value) values
  ('contact', '{"business_name":"Shri Riddhi Siddhi Jewellers","phone":"096530 69612","whatsapp":"919653069612","address_line1":"Badi Durga Maa Sthal, Chowk, Thatheri Bazaar","address_line2":"Khairabad, Sultanpur, Uttar Pradesh 228001","hours":"Mon – Sun: 10:30 AM – 8:30 PM","email":"","rating":"5.0","review_count":"177+"}'),
  ('map', '{"query":"Shri Riddhi Siddhi Jewellers, Thatheri Bazaar, Khairabad, Sultanpur, Uttar Pradesh 228001","embed_url":""}'),
  ('about', '{"heading":"A Legacy Of Trust In Sultanpur","body":"Located at Badi Durga Maa Sthal in the heart of Thatheri Bazaar, Shri Riddhi Siddhi Jewellers has served families across Sultanpur with certified diamonds, hallmarked gold and genuine gemstones. Every piece is selected for purity, craftsmanship and lasting value.","image_url":""}'),
- ('why_us', '{"items":[{"title":"Certified Diamonds","text":"Every diamond comes with an authentic certificate."},{"title":"BIS Hallmarked Gold","text":"Guaranteed purity in every gram."},{"title":"Genuine Gemstones","text":"Lab-tested ruby, emerald, sapphire and pearl."},{"title":"Transparent Pricing","text":"Daily updated rates, no hidden charges."}]}'),
+ ('why_us', '{"items":[{"title":"Certified Diamonds","text":"Every diamond comes with an authentic certificate."},{"title":"BIS Hallmarked Gold","text":"Guaranteed purity in every gram."},{"title":"Genuine Gemstones", emerald, sapphire and pearl."},{"title":"Transparent Pricing","text":"Daily updated rates, no hidden charges."}]}'),
  ('seo', '{"title":"Shri Riddhi Siddhi Jewellers | Jewellery Showroom in Sultanpur","description":"Discover premium gold, diamond jewellery and certified gemstones at Shri Riddhi Siddhi Jewellers in Sultanpur, Uttar Pradesh."}');
