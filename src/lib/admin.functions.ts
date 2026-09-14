@@ -1,9 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { queryOptions } from "@tanstack/react-query";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { supabase } from "@/integrations/supabase/client";
 import type { Category, Collection, Enquiry, Media, Offer, ProductFull, Rate, Review, Setting, HomepageSection } from "./types";
 import type { Json } from "@/integrations/supabase/types";
 import Razorpay from "razorpay";
+import { createClient } from "@supabase/supabase-js";
 /* ------------ auth helpers ------------ */
 
 async function assertAdmin(context: { supabase: { rpc: (fn: "is_admin") => PromiseLike<{ data: unknown }> }; userId: string }) {
@@ -548,6 +550,163 @@ export const adminHomepageQuery = queryOptions({ queryKey: ["admin", "homepage"]
 export const adminEnquiriesQuery = queryOptions({ queryKey: ["admin", "enquiries"], queryFn: () => adminGetEnquiries() });
 export const adminMediaQuery = queryOptions({ queryKey: ["admin", "media"], queryFn: () => adminListMedia({ data: {} }) });
 export const adminAdminsQuery = queryOptions({ queryKey: ["admin", "admins"], queryFn: () => adminGetAdmins() });
+export const createCustomerEnquiry = createServerFn({
+  method: "POST",
+})
+  .validator(
+    (data: {
+      customer_name: string;
+      customer_email?: string;
+      customer_phone: string;
+      customer_address?: string;
+      customer_city?: string;
+      customer_state?: string;
+      customer_pincode?: string;
+      message?: string;
+
+      items: Array<{
+        product_id: string;
+        product_name: string;
+        product_slug?: string;
+        quantity: number;
+        unit_price: number;
+        total_price: number;
+        product_image?: string;
+      }>;
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    // ==========================================
+    // 1. SERVER-SIDE SUPABASE CLIENT
+    // ==========================================
+
+    const SUPABASE_URL =
+      process.env.SUPABASE_URL ||
+      import.meta.env.VITE_SUPABASE_URL;
+
+    const SUPABASE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!SUPABASE_URL || !SUPABASE_KEY) {
+      throw new Error(
+        "Supabase environment variables are missing.",
+      );
+    }
+
+    const serverSupabase = createClient(
+      SUPABASE_URL,
+      SUPABASE_KEY,
+      {
+        global: {
+          fetch: (input, init) => {
+            const headers = new Headers(
+              typeof Request !== "undefined" && input instanceof Request
+                ? input.headers
+                : undefined,
+            );
+
+            if (init?.headers) {
+              new Headers(init.headers).forEach((value, key) =>
+                headers.set(key, value),
+              );
+            }
+
+            // Supabase publishable keys are API keys, not JWT bearer tokens.
+            if (
+              SUPABASE_KEY.startsWith("sb_publishable_") &&
+              headers.get("Authorization") === `Bearer ${SUPABASE_KEY}`
+            ) {
+              headers.delete("Authorization");
+            }
+
+            headers.set("apikey", SUPABASE_KEY);
+
+            return fetch(input, {
+              ...init,
+              headers,
+            });
+          },
+        },
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+        },
+      },
+    );
+
+    // ==========================================
+    // 2. VALIDATION
+    // ==========================================
+
+    if (!data.customer_name.trim()) {
+      throw new Error("Name is required.");
+    }
+
+    if (!/^[0-9]{10}$/.test(data.customer_phone)) {
+      throw new Error("Enter a valid 10-digit mobile number.");
+    }
+
+    if (!data.items.length) {
+      throw new Error("Your cart is empty.");
+    }
+
+    const enquiryItems = data.items.map((item) => ({
+      product_id: item.product_id,
+      product_name: item.product_name,
+      product_slug: item.product_slug || null,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      total_price: item.total_price,
+      product_image: item.product_image || null,
+    }));
+
+    const { data: enquiry, error } = await serverSupabase
+      .from("enquiries")
+      .insert({
+        customer_name: data.customer_name.trim(),
+        customer_email: data.customer_email?.trim() || null,
+        phone: data.customer_phone,
+
+        customer_address:
+          data.customer_address?.trim() || null,
+
+        customer_city:
+          data.customer_city?.trim() || null,
+
+        customer_state:
+          data.customer_state?.trim() || null,
+
+        customer_pincode:
+          data.customer_pincode?.trim() || null,
+
+        product_id: data.items[0]?.product_id || null,
+        product_name:
+          data.items.length === 1
+            ? data.items[0].product_name
+            : `${data.items.length} cart items`,
+
+        message:
+          data.message?.trim() ||
+          "Customer submitted an enquiry from cart.",
+
+        channel: "website",
+        status: "new",
+
+        cart_items: enquiryItems,
+      })
+      .select("id")
+      .single();
+
+    if (error) {
+      console.error("Enquiry creation failed:", error);
+      throw new Error(error.message);
+    }
+
+    return {
+      success: true,
+      enquiryId: enquiry.id,
+    };
+  });
 export const createCustomerOrder = createServerFn({ method: "POST" })
   .validator(
     (data: {

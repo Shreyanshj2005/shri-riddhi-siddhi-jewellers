@@ -12,6 +12,8 @@ import {
   X,
   ExternalLink,
   Tag,
+  Video,
+  MessageSquare,
 } from "lucide-react";
 
 const NAV = [
@@ -33,6 +35,13 @@ const NAV = [
     icon: Tag,
     exact: false,
   },
+  {
+  to: "/admin/hero",
+  label: "Hero Videos",
+  icon: Video,
+  exact: true,
+  },
+  { to: "/admin/enquiries", label: "Enquiries", icon: MessageSquare, exact: true },
 ] as const;
 
 export function AdminShell({ children }: { children: ReactNode }) {

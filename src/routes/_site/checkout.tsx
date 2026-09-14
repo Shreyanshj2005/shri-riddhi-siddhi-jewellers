@@ -3,7 +3,10 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, Lock, ShoppingBag } from "lucide-react";
 
 import { useCart } from "@/context/CartContext";
-import { createCustomerOrder } from "@/lib/admin.functions";
+import {
+  createCustomerOrder,
+  createCustomerEnquiry,
+} from "@/lib/admin.functions";
 import { verifyCustomerPayment } from "@/lib/customer.functions";
 
 export const Route = createFileRoute("/_site/checkout")({
@@ -148,6 +151,92 @@ function CheckoutPage() {
       "Invalid coupon code.",
     );
   };
+  const handleEnquiry = async () => {
+  if (items.length === 0) {
+    alert("Your cart is empty.");
+    return;
+  }
+
+  if (!form.name.trim()) {
+    alert("Please enter your name.");
+    return;
+  }
+
+  if (!/^[0-9]{10}$/.test(form.phone)) {
+    alert("Please enter a valid 10-digit mobile number.");
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    const result = await createCustomerEnquiry({
+      data: {
+        customer_name: form.name,
+        customer_email: form.email || undefined,
+        customer_phone: form.phone,
+
+        customer_address:
+          form.address || undefined,
+
+        customer_city:
+          form.city || undefined,
+
+        customer_state:
+          form.state || undefined,
+
+        customer_pincode:
+          form.pincode || undefined,
+
+        message:
+          "Customer wants information about the items in their cart.",
+
+        items: items.map((item) => ({
+          product_id: item.product.id,
+          product_name: item.product.name,
+          product_slug: item.product.slug,
+
+          quantity: item.quantity,
+
+          unit_price:
+            Number(item.product.price),
+
+          total_price:
+            Number(item.product.price) *
+            item.quantity,
+
+          product_image:
+            item.product.image || undefined,
+        })),
+      },
+    });
+
+    if (!result?.success) {
+      throw new Error(
+        "Unable to submit enquiry.",
+      );
+    }
+
+    alert(
+      "Thank you! Your enquiry has been sent to SHRI RIDDHI SIDDHI JEWELLERS.",
+    );
+
+    clearCart();
+  } catch (error) {
+    console.error(
+      "Enquiry error:",
+      error,
+    );
+
+    alert(
+      error instanceof Error
+        ? error.message
+        : "Unable to send enquiry.",
+    );
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Submit checkout
   const handleSubmit = async (
@@ -614,6 +703,19 @@ function CheckoutPage() {
                 ? "Opening Payment..."
                 : "Pay Now"}
             </button>
+            <button
+  type="button"
+  disabled={
+    loading ||
+    items.length === 0
+  }
+  onClick={() => void handleEnquiry()}
+  className="mt-3 w-full rounded-xl border-2 border-black bg-white px-6 py-4 text-sm font-semibold text-black transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+>
+  {loading
+    ? "Sending..."
+    : "💬 Send Enquiry"}
+</button>
           </form>
 
           {/* Order Summary */}

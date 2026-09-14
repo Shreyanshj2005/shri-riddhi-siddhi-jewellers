@@ -33,6 +33,8 @@ import { Route as SiteTermsRouteImport } from './routes/_site/terms'
 import { Route as SiteWishlistRouteImport } from './routes/_site/wishlist'
 import { Route as AdminLoginRouteImport } from './routes/admin.login'
 import { Route as AdminappAdminIndexRouteImport } from './routes/_adminapp/admin.index'
+import { Route as AdminappAdminEnquiriesRouteImport } from './routes/_adminapp/admin.enquiries'
+import { Route as AdminappAdminHeroRouteImport } from './routes/_adminapp/admin.hero'
 import { Route as AdminappAdminOffersRouteImport } from './routes/_adminapp/admin.offers'
 import { Route as AdminappAdminProductsRouteImport } from './routes/_adminapp/admin.products'
 import { Route as SiteCollectionSlugRouteImport } from './routes/_site/collection.$slug'
@@ -157,6 +159,16 @@ const AdminappAdminIndexRoute = AdminappAdminIndexRouteImport.update({
   path: '/admin/',
   getParentRoute: () => AdminappRoute,
 } as any)
+const AdminappAdminEnquiriesRoute = AdminappAdminEnquiriesRouteImport.update({
+  id: '/admin/enquiries',
+  path: '/admin/enquiries',
+  getParentRoute: () => AdminappRoute,
+} as any)
+const AdminappAdminHeroRoute = AdminappAdminHeroRouteImport.update({
+  id: '/admin/hero',
+  path: '/admin/hero',
+  getParentRoute: () => AdminappRoute,
+} as any)
 const AdminappAdminOffersRoute = AdminappAdminOffersRouteImport.update({
   id: '/admin/offers',
   path: '/admin/offers',
@@ -205,6 +217,8 @@ export interface FileRoutesByFullPath {
   '/terms': typeof SiteTermsRoute
   '/wishlist': typeof SiteWishlistRoute
   '/admin/login': typeof AdminLoginRoute
+  '/admin/enquiries': typeof AdminappAdminEnquiriesRoute
+  '/admin/hero': typeof AdminappAdminHeroRoute
   '/admin/offers': typeof AdminappAdminOffersRoute
   '/admin/products': typeof AdminappAdminProductsRoute
   '/collection/$slug': typeof SiteCollectionSlugRoute
@@ -234,6 +248,8 @@ export interface FileRoutesByTo {
   '/terms': typeof SiteTermsRoute
   '/wishlist': typeof SiteWishlistRoute
   '/admin/login': typeof AdminLoginRoute
+  '/admin/enquiries': typeof AdminappAdminEnquiriesRoute
+  '/admin/hero': typeof AdminappAdminHeroRoute
   '/admin/offers': typeof AdminappAdminOffersRoute
   '/admin/products': typeof AdminappAdminProductsRoute
   '/collection/$slug': typeof SiteCollectionSlugRoute
@@ -266,6 +282,8 @@ export interface FileRoutesById {
   '/_site/wishlist': typeof SiteWishlistRoute
   '/admin/login': typeof AdminLoginRoute
   '/_site/': typeof SiteIndexRoute
+  '/_adminapp/admin/enquiries': typeof AdminappAdminEnquiriesRoute
+  '/_adminapp/admin/hero': typeof AdminappAdminHeroRoute
   '/_adminapp/admin/offers': typeof AdminappAdminOffersRoute
   '/_adminapp/admin/products': typeof AdminappAdminProductsRoute
   '/_site/collection/$slug': typeof SiteCollectionSlugRoute
@@ -297,6 +315,8 @@ export interface FileRouteTypes {
     | '/terms'
     | '/wishlist'
     | '/admin/login'
+    | '/admin/enquiries'
+    | '/admin/hero'
     | '/admin/offers'
     | '/admin/products'
     | '/collection/$slug'
@@ -326,6 +346,8 @@ export interface FileRouteTypes {
     | '/terms'
     | '/wishlist'
     | '/admin/login'
+    | '/admin/enquiries'
+    | '/admin/hero'
     | '/admin/offers'
     | '/admin/products'
     | '/collection/$slug'
@@ -357,6 +379,8 @@ export interface FileRouteTypes {
     | '/_site/wishlist'
     | '/admin/login'
     | '/_site/'
+    | '/_adminapp/admin/enquiries'
+    | '/_adminapp/admin/hero'
     | '/_adminapp/admin/offers'
     | '/_adminapp/admin/products'
     | '/_site/collection/$slug'
@@ -542,6 +566,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminappAdminIndexRouteImport
       parentRoute: typeof AdminappRoute
     }
+    '/_adminapp/admin/enquiries': {
+      id: '/_adminapp/admin/enquiries'
+      path: '/admin/enquiries'
+      fullPath: '/admin/enquiries'
+      preLoaderRoute: typeof AdminappAdminEnquiriesRouteImport
+      parentRoute: typeof AdminappRoute
+    }
+    '/_adminapp/admin/hero': {
+      id: '/_adminapp/admin/hero'
+      path: '/admin/hero'
+      fullPath: '/admin/hero'
+      preLoaderRoute: typeof AdminappAdminHeroRouteImport
+      parentRoute: typeof AdminappRoute
+    }
     '/_adminapp/admin/offers': {
       id: '/_adminapp/admin/offers'
       path: '/admin/offers'
@@ -635,12 +673,16 @@ const SiteRouteRouteWithChildren = SiteRouteRoute._addFileChildren(
 )
 
 interface AdminappRouteChildren {
+  AdminappAdminEnquiriesRoute: typeof AdminappAdminEnquiriesRoute
+  AdminappAdminHeroRoute: typeof AdminappAdminHeroRoute
   AdminappAdminOffersRoute: typeof AdminappAdminOffersRoute
   AdminappAdminProductsRoute: typeof AdminappAdminProductsRoute
   AdminappAdminIndexRoute: typeof AdminappAdminIndexRoute
 }
 
 const AdminappRouteChildren: AdminappRouteChildren = {
+  AdminappAdminEnquiriesRoute: AdminappAdminEnquiriesRoute,
+  AdminappAdminHeroRoute: AdminappAdminHeroRoute,
   AdminappAdminOffersRoute: AdminappAdminOffersRoute,
   AdminappAdminProductsRoute: AdminappAdminProductsRoute,
   AdminappAdminIndexRoute: AdminappAdminIndexRoute,
