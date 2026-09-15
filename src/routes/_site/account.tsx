@@ -196,7 +196,7 @@ function AccountPage() {
                           <p className="text-xs text-muted-foreground">Qty: {item.quantity}</p>
                         </div>
 
-                        <p className="text-sm font-medium">{money(item.total_price)}</p>
+                        <p className="text-sm font-medium">{money(item.subtotal)}</p>
                       </div>
                     ))}
                   </div>

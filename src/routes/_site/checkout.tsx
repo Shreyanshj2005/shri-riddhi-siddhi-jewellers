@@ -8,6 +8,7 @@ import {
   createCustomerEnquiry,
 } from "@/lib/admin.functions";
 import { verifyCustomerPayment } from "@/lib/customer.functions";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_site/checkout")({
   component: CheckoutPage,
@@ -79,13 +80,19 @@ function CheckoutPage() {
 
   const [loading, setLoading] = useState(false);
 
+  // -----------------------------------------
   // Coupon states
+  // -----------------------------------------
+
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState("");
   const [couponDiscount, setCouponDiscount] = useState(0);
   const [couponMessage, setCouponMessage] = useState("");
 
+  // -----------------------------------------
   // Load Razorpay Checkout script
+  // -----------------------------------------
+
   useEffect(() => {
     if (
       document.getElementById(
@@ -105,7 +112,10 @@ function CheckoutPage() {
     document.body.appendChild(script);
   }, []);
 
-  // Update checkout fields
+  // -----------------------------------------
+  // Update form field
+  // -----------------------------------------
+
   const updateField = (
     field: keyof CheckoutForm,
     value: string,
@@ -116,16 +126,23 @@ function CheckoutPage() {
     }));
   };
 
+  // -----------------------------------------
   // Apply coupon
+  // -----------------------------------------
+
   const applyCoupon = () => {
-    const code = couponCode.trim().toUpperCase();
+    const code = couponCode
+      .trim()
+      .toUpperCase();
 
     if (!code) {
       setCouponMessage(
         "Please enter a coupon code.",
       );
+
       setAppliedCoupon("");
       setCouponDiscount(0);
+
       return;
     }
 
@@ -138,6 +155,7 @@ function CheckoutPage() {
 
       setAppliedCoupon("RSJ");
       setCouponDiscount(discount);
+
       setCouponMessage(
         "Coupon applied successfully!",
       );
@@ -147,111 +165,30 @@ function CheckoutPage() {
 
     setAppliedCoupon("");
     setCouponDiscount(0);
+
     setCouponMessage(
       "Invalid coupon code.",
     );
   };
+
+  // -----------------------------------------
+  // Send Customer Enquiry
+  // -----------------------------------------
+
   const handleEnquiry = async () => {
-  if (items.length === 0) {
-    alert("Your cart is empty.");
-    return;
-  }
-
-  if (!form.name.trim()) {
-    alert("Please enter your name.");
-    return;
-  }
-
-  if (!/^[0-9]{10}$/.test(form.phone)) {
-    alert("Please enter a valid 10-digit mobile number.");
-    return;
-  }
-
-  setLoading(true);
-
-  try {
-    const result = await createCustomerEnquiry({
-      data: {
-        customer_name: form.name,
-        customer_email: form.email || undefined,
-        customer_phone: form.phone,
-
-        customer_address:
-          form.address || undefined,
-
-        customer_city:
-          form.city || undefined,
-
-        customer_state:
-          form.state || undefined,
-
-        customer_pincode:
-          form.pincode || undefined,
-
-        message:
-          "Customer wants information about the items in their cart.",
-
-        items: items.map((item) => ({
-          product_id: item.product.id,
-          product_name: item.product.name,
-          product_slug: item.product.slug,
-
-          quantity: item.quantity,
-
-          unit_price:
-            Number(item.product.price),
-
-          total_price:
-            Number(item.product.price) *
-            item.quantity,
-
-          product_image:
-            item.product.image || undefined,
-        })),
-      },
-    });
-
-    if (!result?.success) {
-      throw new Error(
-        "Unable to submit enquiry.",
-      );
-    }
-
-    alert(
-      "Thank you! Your enquiry has been sent to SHRI RIDDHI SIDDHI JEWELLERS.",
-    );
-
-    clearCart();
-  } catch (error) {
-    console.error(
-      "Enquiry error:",
-      error,
-    );
-
-    alert(
-      error instanceof Error
-        ? error.message
-        : "Unable to send enquiry.",
-    );
-  } finally {
-    setLoading(false);
-  }
-};
-
-  // Submit checkout
-  const handleSubmit = async (
-    event: React.FormEvent,
-  ) => {
-    event.preventDefault();
-
     if (items.length === 0) {
       alert("Your cart is empty.");
       return;
     }
 
-    if (!window.Razorpay) {
+    if (!form.name.trim()) {
+      alert("Please enter your name.");
+      return;
+    }
+
+    if (!/^[0-9]{10}$/.test(form.phone)) {
       alert(
-        "Payment gateway is still loading. Please wait a moment and try again.",
+        "Please enter a valid 10-digit mobile number.",
       );
       return;
     }
@@ -259,45 +196,37 @@ function CheckoutPage() {
     setLoading(true);
 
     try {
-      // -----------------------------------------
-      // 1. Create SRSJ customer order
-      // -----------------------------------------
-
       const result =
-        await createCustomerOrder({
+        await createCustomerEnquiry({
           data: {
-            customer_name: form.name,
+            customer_name:
+              form.name,
 
             customer_email:
-              form.email || undefined,
+              form.email ||
+              undefined,
 
-            customer_phone: form.phone,
+            customer_phone:
+              form.phone,
 
-            shipping_address:
-              form.address,
+            customer_address:
+              form.address ||
+              undefined,
 
-            shipping_city: form.city,
+            customer_city:
+              form.city ||
+              undefined,
 
-            shipping_state: form.state,
+            customer_state:
+              form.state ||
+              undefined,
 
-            shipping_pincode:
-              form.pincode,
+            customer_pincode:
+              form.pincode ||
+              undefined,
 
-            subtotal: cartTotal,
-
-            shipping_charge: 0,
-
-            discount: couponDiscount,
-
-            total_amount: Math.max(
-              0,
-              cartTotal - couponDiscount,
-            ),
-
-            payment_method: "razorpay",
-
-            coupon_code:
-              appliedCoupon || undefined,
+            message:
+              "Customer wants information about the items in their cart.",
 
             items: items.map((item) => ({
               product_id:
@@ -309,16 +238,19 @@ function CheckoutPage() {
               product_slug:
                 item.product.slug,
 
-              quantity: item.quantity,
+              quantity:
+                item.quantity,
 
-              unit_price: Number(
-                item.product.price,
-              ),
+              unit_price:
+                Number(
+                  item.product.price,
+                ),
 
               total_price:
                 Number(
                   item.product.price,
-                ) * item.quantity,
+                ) *
+                item.quantity,
 
               product_image:
                 item.product.image ||
@@ -326,6 +258,188 @@ function CheckoutPage() {
             })),
           },
         });
+
+      if (!result?.success) {
+        throw new Error(
+          "Unable to submit enquiry.",
+        );
+      }
+
+      alert(
+        "Thank you! Your enquiry has been sent to SHRI RIDDHI SIDDHI JEWELLERS.",
+      );
+
+      clearCart();
+    } catch (error) {
+      console.error(
+        "Enquiry error:",
+        error,
+      );
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Unable to send enquiry.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // -----------------------------------------
+  // Submit Checkout / Payment
+  // -----------------------------------------
+
+  const handleSubmit = async (
+    event: React.FormEvent,
+  ) => {
+    event.preventDefault();
+
+    // -----------------------------------------
+    // Cart check
+    // -----------------------------------------
+
+    if (items.length === 0) {
+      alert("Your cart is empty.");
+      return;
+    }
+
+    // -----------------------------------------
+    // Razorpay check
+    // -----------------------------------------
+
+    if (!window.Razorpay) {
+      alert(
+        "Payment gateway is still loading. Please wait a moment and try again.",
+      );
+
+      return;
+    }
+
+    // -----------------------------------------
+    // Get logged-in customer
+    // -----------------------------------------
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      alert(
+        "Please login or create an account before placing your order.",
+      );
+
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // -----------------------------------------
+      // 1. Create Customer Order
+      // -----------------------------------------
+
+      /*
+       * IMPORTANT:
+       *
+       * Do NOT send customer_id from the client.
+       *
+       * The server gets the authenticated user ID
+       * from requireSupabaseAuth -> context.userId.
+       *
+       * This prevents a customer from changing
+       * another customer's ID from the browser.
+       */
+
+      const result =
+        await createCustomerOrder({
+          data: {
+            customer_name:
+              form.name,
+
+            customer_email:
+              form.email ||
+              user.email ||
+              undefined,
+
+            customer_phone:
+              form.phone,
+
+            shipping_address:
+              form.address,
+
+            shipping_city:
+              form.city,
+
+            shipping_state:
+              form.state,
+
+            shipping_pincode:
+              form.pincode,
+
+            subtotal:
+              cartTotal,
+
+            shipping_charge:
+              0,
+
+            discount:
+              couponDiscount,
+
+            total_amount:
+              Math.max(
+                0,
+                cartTotal -
+                  couponDiscount,
+              ),
+
+            payment_method:
+              "razorpay",
+
+            coupon_code:
+              appliedCoupon ||
+              undefined,
+
+            // -----------------------------------------
+            // Product snapshot
+            // -----------------------------------------
+
+            items: items.map(
+              (item) => ({
+                product_id:
+                  item.product.id,
+
+                product_name:
+                  item.product.name,
+
+                product_slug:
+                  item.product.slug,
+
+                quantity:
+                  item.quantity,
+
+                unit_price:
+                  Number(
+                    item.product.price,
+                  ),
+
+                total_price:
+                  Number(
+                    item.product.price,
+                  ) *
+                  item.quantity,
+
+                product_image:
+                  item.product.image ||
+                  undefined,
+              }),
+            ),
+          },
+        });
+
+      // -----------------------------------------
+      // Order creation check
+      // -----------------------------------------
 
       if (!result?.success) {
         throw new Error(
@@ -346,15 +460,18 @@ function CheckoutPage() {
       }
 
       // -----------------------------------------
-      // 2. Open Razorpay TEST Checkout
+      // 2. Razorpay Checkout
       // -----------------------------------------
 
       const options: RazorpayOptions = {
-        key: result.razorpayKeyId,
+        key:
+          result.razorpayKeyId,
 
-        amount: result.amount,
+        amount:
+          result.amount,
 
-        currency: result.currency,
+        currency:
+          result.currency,
 
         name:
           "SHRI RIDDHI SIDDHI JEWELLERS",
@@ -365,27 +482,49 @@ function CheckoutPage() {
         order_id:
           result.razorpayOrderId,
 
+        // -----------------------------------------
+        // Customer prefill
+        // -----------------------------------------
+
         prefill: {
-          name: form.name,
+          name:
+            form.name,
 
           email:
-            form.email || undefined,
+            form.email ||
+            user.email ||
+            undefined,
 
-          contact: form.phone,
+          contact:
+            form.phone,
         },
 
         theme: {
-          color: "#111111",
+          color:
+            "#111111",
         },
 
-        handler: async (response) => {
+        // -----------------------------------------
+        // Razorpay payment success
+        // -----------------------------------------
+
+        handler: async (
+          response,
+        ) => {
           try {
             await verifyCustomerPayment({
               data: {
-                orderId: result.orderId,
-                razorpayOrderId: response.razorpay_order_id,
-                razorpayPaymentId: response.razorpay_payment_id,
-                razorpaySignature: response.razorpay_signature,
+                orderId:
+                  result.orderId,
+
+                razorpayOrderId:
+                  response.razorpay_order_id,
+
+                razorpayPaymentId:
+                  response.razorpay_payment_id,
+
+                razorpaySignature:
+                  response.razorpay_signature,
               },
             });
 
@@ -395,7 +534,10 @@ function CheckoutPage() {
 
             clearCart();
           } catch (error) {
-            console.error("Payment verification error:", error);
+            console.error(
+              "Payment verification error:",
+              error,
+            );
 
             alert(
               error instanceof Error
@@ -404,6 +546,10 @@ function CheckoutPage() {
             );
           }
         },
+
+        // -----------------------------------------
+        // Razorpay closed
+        // -----------------------------------------
 
         modal: {
           ondismiss: () => {
@@ -414,8 +560,14 @@ function CheckoutPage() {
         },
       };
 
+      // -----------------------------------------
+      // Open Razorpay
+      // -----------------------------------------
+
       const razorpay =
-        new window.Razorpay(options);
+        new window.Razorpay(
+          options,
+        );
 
       razorpay.open();
     } catch (error) {
@@ -434,9 +586,14 @@ function CheckoutPage() {
     }
   };
 
+  // -----------------------------------------
+  // UI
+  // -----------------------------------------
+
   return (
     <main className="min-h-screen bg-white">
       {/* Header */}
+
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-5 sm:px-6 lg:px-8">
           <Link
@@ -455,7 +612,10 @@ function CheckoutPage() {
       </header>
 
       {/* Checkout */}
+
       <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+        {/* Page Heading */}
+
         <div className="mb-10">
           <p className="text-xs uppercase tracking-[0.3em] text-gray-500">
             SHRI RIDDHI SIDDHI JEWELLERS
@@ -472,12 +632,16 @@ function CheckoutPage() {
         </div>
 
         <div className="grid gap-10 lg:grid-cols-[1fr_380px]">
-          {/* Form */}
+          {/* -----------------------------------------
+              Checkout Form
+          ----------------------------------------- */}
+
           <form
             onSubmit={handleSubmit}
             className="rounded-2xl border bg-white p-6 shadow-sm sm:p-8"
           >
             {/* Customer Details */}
+
             <div className="mb-8">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-black text-white">
@@ -497,7 +661,8 @@ function CheckoutPage() {
             </div>
 
             <div className="grid gap-5 sm:grid-cols-2">
-              {/* Name */}
+              {/* Full Name */}
+
               <div className="sm:col-span-2">
                 <label className="mb-2 block text-sm font-medium">
                   Full Name *
@@ -517,7 +682,8 @@ function CheckoutPage() {
                 />
               </div>
 
-              {/* Phone */}
+              {/* Mobile */}
+
               <div>
                 <label className="mb-2 block text-sm font-medium">
                   Mobile Number *
@@ -545,6 +711,7 @@ function CheckoutPage() {
               </div>
 
               {/* Email */}
+
               <div>
                 <label className="mb-2 block text-sm font-medium">
                   Email
@@ -565,6 +732,7 @@ function CheckoutPage() {
               </div>
 
               {/* Address */}
+
               <div className="sm:col-span-2">
                 <label className="mb-2 block text-sm font-medium">
                   Address *
@@ -586,6 +754,7 @@ function CheckoutPage() {
               </div>
 
               {/* City */}
+
               <div>
                 <label className="mb-2 block text-sm font-medium">
                   City *
@@ -606,6 +775,7 @@ function CheckoutPage() {
               </div>
 
               {/* State */}
+
               <div>
                 <label className="mb-2 block text-sm font-medium">
                   State *
@@ -626,6 +796,7 @@ function CheckoutPage() {
               </div>
 
               {/* Pincode */}
+
               <div>
                 <label className="mb-2 block text-sm font-medium">
                   Pincode *
@@ -652,7 +823,10 @@ function CheckoutPage() {
               </div>
             </div>
 
-            {/* Payment */}
+            {/* -----------------------------------------
+                Payment
+            ----------------------------------------- */}
+
             <div className="mt-10 border-t pt-8">
               <div className="mb-5 flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-black text-white">
@@ -690,7 +864,10 @@ function CheckoutPage() {
               </div>
             </div>
 
-            {/* Pay Now */}
+            {/* -----------------------------------------
+                Pay Now
+            ----------------------------------------- */}
+
             <button
               type="submit"
               disabled={
@@ -703,22 +880,32 @@ function CheckoutPage() {
                 ? "Opening Payment..."
                 : "Pay Now"}
             </button>
+
+            {/* -----------------------------------------
+                Enquiry
+            ----------------------------------------- */}
+
             <button
-  type="button"
-  disabled={
-    loading ||
-    items.length === 0
-  }
-  onClick={() => void handleEnquiry()}
-  className="mt-3 w-full rounded-xl border-2 border-black bg-white px-6 py-4 text-sm font-semibold text-black transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
->
-  {loading
-    ? "Sending..."
-    : "💬 Send Enquiry"}
-</button>
+              type="button"
+              disabled={
+                loading ||
+                items.length === 0
+              }
+              onClick={() =>
+                void handleEnquiry()
+              }
+              className="mt-3 w-full rounded-xl border-2 border-black bg-white px-6 py-4 text-sm font-semibold text-black transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading
+                ? "Sending..."
+                : "💬 Send Enquiry"}
+            </button>
           </form>
 
-          {/* Order Summary */}
+          {/* -----------------------------------------
+              Order Summary
+          ----------------------------------------- */}
+
           <aside className="h-fit rounded-2xl border bg-gray-50 p-6 sm:p-8">
             <div className="mb-6 flex items-center gap-3">
               <ShoppingBag className="h-5 w-5" />
@@ -727,6 +914,8 @@ function CheckoutPage() {
                 Order Summary
               </h2>
             </div>
+
+            {/* Empty Cart */}
 
             {items.length === 0 ? (
               <div className="rounded-xl border bg-white p-5">
@@ -748,11 +937,17 @@ function CheckoutPage() {
                     key={item.product.id}
                     className="flex gap-4"
                   >
+                    {/* Product Image */}
+
                     <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-gray-100">
                       {item.product.image ? (
                         <img
-                          src={item.product.image}
-                          alt={item.product.name}
+                          src={
+                            item.product.image
+                          }
+                          alt={
+                            item.product.name
+                          }
                           className="h-full w-full object-cover"
                         />
                       ) : (
@@ -762,23 +957,29 @@ function CheckoutPage() {
                       )}
                     </div>
 
+                    {/* Product Details */}
+
                     <div className="min-w-0 flex-1">
                       <p className="font-medium">
                         {item.product.name}
                       </p>
 
                       <p className="mt-1 text-sm text-gray-500">
-                        Qty: {item.quantity}
+                        Qty:{" "}
+                        {item.quantity}
                       </p>
 
                       <p className="mt-1 text-sm font-medium">
                         ₹
                         {(
                           Number(
-                            item.product.price,
+                            item.product
+                              .price,
                           ) *
                           item.quantity
-                        ).toLocaleString("en-IN")}
+                        ).toLocaleString(
+                          "en-IN",
+                        )}
                       </p>
                     </div>
                   </div>
@@ -786,7 +987,10 @@ function CheckoutPage() {
               </div>
             )}
 
-            {/* Coupon */}
+            {/* -----------------------------------------
+                Coupon
+            ----------------------------------------- */}
+
             <div className="mt-6 border-t pt-6">
               <label
                 htmlFor="coupon"
@@ -806,9 +1010,17 @@ function CheckoutPage() {
                     );
 
                     if (appliedCoupon) {
-                      setAppliedCoupon("");
-                      setCouponDiscount(0);
-                      setCouponMessage("");
+                      setAppliedCoupon(
+                        "",
+                      );
+
+                      setCouponDiscount(
+                        0,
+                      );
+
+                      setCouponMessage(
+                        "",
+                      );
                     }
                   }}
                   placeholder="Enter coupon code"
@@ -839,15 +1051,25 @@ function CheckoutPage() {
               {appliedCoupon && (
                 <div className="mt-3 flex items-center justify-between rounded-lg bg-green-50 px-3 py-2 text-sm">
                   <span className="text-green-700">
-                    Coupon: {appliedCoupon}
+                    Coupon:{" "}
+                    {appliedCoupon}
                   </span>
 
                   <button
                     type="button"
                     onClick={() => {
-                      setAppliedCoupon("");
-                      setCouponDiscount(0);
-                      setCouponMessage("");
+                      setAppliedCoupon(
+                        "",
+                      );
+
+                      setCouponDiscount(
+                        0,
+                      );
+
+                      setCouponMessage(
+                        "",
+                      );
+
                       setCouponCode("");
                     }}
                     className="font-medium text-red-600 hover:underline"
@@ -858,8 +1080,13 @@ function CheckoutPage() {
               )}
             </div>
 
-            {/* Total */}
+            {/* -----------------------------------------
+                Total
+            ----------------------------------------- */}
+
             <div className="mt-6 space-y-3 border-t pt-6">
+              {/* Subtotal */}
+
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">
                   Subtotal
@@ -873,6 +1100,8 @@ function CheckoutPage() {
                 </span>
               </div>
 
+              {/* Shipping */}
+
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">
                   Shipping
@@ -880,6 +1109,8 @@ function CheckoutPage() {
 
                 <span>Free</span>
               </div>
+
+              {/* Coupon Discount */}
 
               {couponDiscount > 0 && (
                 <div className="flex justify-between text-sm">
@@ -893,13 +1124,18 @@ function CheckoutPage() {
                     {couponDiscount.toLocaleString(
                       "en-IN",
                       {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
+                        minimumFractionDigits:
+                          2,
+
+                        maximumFractionDigits:
+                          2,
                       },
                     )}
                   </span>
                 </div>
               )}
+
+              {/* Final Total */}
 
               <div className="flex justify-between border-t pt-4 text-lg font-semibold">
                 <span>Total</span>
@@ -910,10 +1146,16 @@ function CheckoutPage() {
                     0,
                     cartTotal -
                       couponDiscount,
-                  ).toLocaleString("en-IN", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+                  ).toLocaleString(
+                    "en-IN",
+                    {
+                      minimumFractionDigits:
+                        2,
+
+                      maximumFractionDigits:
+                        2,
+                    },
+                  )}
                 </span>
               </div>
             </div>

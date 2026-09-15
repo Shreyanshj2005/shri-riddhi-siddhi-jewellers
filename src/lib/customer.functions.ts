@@ -42,7 +42,7 @@ export const getCustomerAccount = createServerFn({ method: "GET" })
         sb
           .from("orders")
           .select("*")
-          .eq("user_id", context.userId)
+          .eq("customer_id", context.userId)
           .order("created_at", { ascending: false }),
       ]);
 
@@ -103,61 +103,153 @@ export const verifyCustomerPayment = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const sb = context.supabase as any;
+
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
     if (!keySecret) {
-      throw new Error("Razorpay server secret is not configured.");
+      throw new Error(
+        "Razorpay server secret is not configured.",
+      );
     }
+
+    // -----------------------------------------
+    // 1. Find customer's order
+    // -----------------------------------------
 
     const { data: order, error: orderError } = await sb
       .from("orders")
-      .select("id,order_number,user_id,razorpay_order_id,payment_status,order_status")
+      .select(
+        "id,order_number,customer_id,razorpay_order_id,payment_status,order_status",
+      )
       .eq("id", data.orderId)
-      .eq("user_id", context.userId)
+      .eq("customer_id", context.userId)
       .maybeSingle();
 
-    if (orderError || !order) {
-      throw new Error("Order not found.");
+    if (orderError) {
+      console.error(
+        "Order lookup failed:",
+        orderError,
+      );
+
+      throw new Error(
+        "Unable to find your order.",
+      );
     }
 
-    if (order.razorpay_order_id !== data.razorpayOrderId) {
-      throw new Error("Razorpay order mismatch.");
+    if (!order) {
+      throw new Error(
+        "Order not found.",
+      );
     }
 
-    const { createHmac, timingSafeEqual } = await import("node:crypto");
-    const expected = createHmac("sha256", keySecret)
-      .update(`${data.razorpayOrderId}|${data.razorpayPaymentId}`)
-      .digest("hex");
-
-    const expectedBuffer = Buffer.from(expected, "utf8");
-    const receivedBuffer = Buffer.from(data.razorpaySignature, "utf8");
+    // -----------------------------------------
+    // 2. Verify Razorpay Order ID
+    // -----------------------------------------
 
     if (
-      expectedBuffer.length !== receivedBuffer.length ||
-      !timingSafeEqual(expectedBuffer, receivedBuffer)
+      order.razorpay_order_id !==
+      data.razorpayOrderId
     ) {
-      throw new Error("Payment verification failed.");
+      throw new Error(
+        "Razorpay order mismatch.",
+      );
     }
 
-    const { error: updateError } = await sb
-      .from("orders")
-      .update({
-        payment_status: "paid",
-        order_status: "confirmed",
-        razorpay_payment_id: data.razorpayPaymentId,
-        razorpay_signature: data.razorpaySignature,
-      })
-      .eq("id", order.id)
-      .eq("user_id", context.userId);
+    // -----------------------------------------
+    // 3. Generate expected signature
+    // -----------------------------------------
 
-    if (updateError) {
-      console.error("Payment status update failed:", updateError);
-      throw new Error("Payment was verified but order update failed.");
+    const {
+      createHmac,
+      timingSafeEqual,
+    } = await import("node:crypto");
+
+    const expectedSignature =
+      createHmac(
+        "sha256",
+        keySecret,
+      )
+        .update(
+          `${data.razorpayOrderId}|${data.razorpayPaymentId}`,
+        )
+        .digest("hex");
+
+    // -----------------------------------------
+    // 4. Compare signatures securely
+    // -----------------------------------------
+
+    const expectedBuffer =
+      Buffer.from(
+        expectedSignature,
+        "utf8",
+      );
+
+    const receivedBuffer =
+      Buffer.from(
+        data.razorpaySignature,
+        "utf8",
+      );
+
+    if (
+      expectedBuffer.length !==
+        receivedBuffer.length ||
+      !timingSafeEqual(
+        expectedBuffer,
+        receivedBuffer,
+      )
+    ) {
+      throw new Error(
+        "Payment verification failed.",
+      );
     }
+
+    // -----------------------------------------
+    // 5. Update order as PAID
+    // -----------------------------------------
+
+    const { data: updatedOrder, error: updateError } =
+      await sb
+        .from("orders")
+        .update({
+          payment_status: "paid",
+          order_status: "confirmed",
+          razorpay_payment_id:
+            data.razorpayPaymentId,
+          razorpay_signature:
+            data.razorpaySignature,
+        })
+        .eq("id", order.id)
+        .eq("customer_id", context.userId)
+        .select(
+          "id,order_number,payment_status,order_status,razorpay_payment_id",
+        )
+        .single();
+
+    if (updateError || !updatedOrder) {
+      console.error(
+        "Payment status update failed:",
+        updateError,
+      );
+
+      throw new Error(
+        "Payment was verified but order update failed.",
+      );
+    }
+
+    // -----------------------------------------
+    // 6. Return success
+    // -----------------------------------------
 
     return {
       success: true,
-      orderId: order.id,
-      orderNumber: order.order_number,
+      orderId: updatedOrder.id,
+      orderNumber:
+        updatedOrder.order_number,
+      paymentStatus:
+        updatedOrder.payment_status,
+      orderStatus:
+        updatedOrder.order_status,
+      razorpayPaymentId:
+        updatedOrder.razorpay_payment_id,
     };
   });

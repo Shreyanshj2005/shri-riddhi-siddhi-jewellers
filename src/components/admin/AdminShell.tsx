@@ -15,6 +15,8 @@ import {
   Video,
   MessageSquare,
   Settings,
+  ShoppingCart,
+  Users,
 } from "lucide-react";
 
 const NAV = [
@@ -30,6 +32,23 @@ const NAV = [
     icon: Package,
     exact: true,
   },
+
+  // ✅ NEW: Orders
+  {
+    to: "/admin/orders",
+    label: "Orders",
+    icon: ShoppingCart,
+    exact: true,
+  },
+
+  // ✅ NEW: Customers
+  {
+    to: "/admin/customers",
+    label: "Customers",
+    icon: Users,
+    exact: true,
+  },
+
   {
     to: "/admin/offers",
     label: "Offers & Promotions",
@@ -37,30 +56,30 @@ const NAV = [
     exact: false,
   },
   {
-  to: "/admin/hero",
-  label: "Hero Videos",
-  icon: Video,
-  exact: true,
+    to: "/admin/hero",
+    label: "Hero Videos",
+    icon: Video,
+    exact: true,
   },
-    { 
-    to: "/admin/enquiries", 
-    label: "Enquiries", 
-    icon: MessageSquare, 
-    exact: true 
+  {
+    to: "/admin/enquiries",
+    label: "Enquiries",
+    icon: MessageSquare,
+    exact: true,
   },
-    {
+  {
     to: "/admin/settings",
     label: "Account Settings",
     icon: Settings,
     exact: true,
   },
-  { to: "/admin/enquiries", label: "Enquiries", icon: MessageSquare, exact: true },
 ] as const;
 
 export function AdminShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
   const pathname = useRouterState({
     select: (s) => s.location.pathname,
   });
@@ -68,8 +87,13 @@ export function AdminShell({ children }: { children: ReactNode }) {
   async function signOut() {
     await queryClient.cancelQueries();
     queryClient.clear();
+
     await supabase.auth.signOut();
-    navigate({ to: "/admin/login", replace: true });
+
+    navigate({
+      to: "/admin/login",
+      replace: true,
+    });
   }
 
   const nav = (
@@ -109,10 +133,17 @@ export function AdminShell({ children }: { children: ReactNode }) {
             onClick={() => setOpen((v) => !v)}
             aria-label="Toggle menu"
           >
-            {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            {open ? (
+              <X className="h-5 w-5" />
+            ) : (
+              <Menu className="h-5 w-5" />
+            )}
           </button>
 
-          <Link to="/admin" className="font-display text-base tracking-wide">
+          <Link
+            to="/admin"
+            className="font-display text-base tracking-wide"
+          >
             SRSJ <span className="text-muted-foreground">Admin</span>
           </Link>
         </div>
@@ -128,7 +159,11 @@ export function AdminShell({ children }: { children: ReactNode }) {
             View site
           </a>
 
-          <Button size="sm" variant="outline" onClick={signOut}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={signOut}
+          >
             <LogOut className="mr-1.5 h-3.5 w-3.5" />
             Sign out
           </Button>
@@ -138,9 +173,13 @@ export function AdminShell({ children }: { children: ReactNode }) {
       <div className="flex">
         <aside
           className="hidden w-60 shrink-0 border-r border-border bg-card lg:block"
-          style={{ minHeight: "calc(100vh - 3.5rem)" }}
+          style={{
+            minHeight: "calc(100vh - 3.5rem)",
+          }}
         >
-          <div className="sticky top-14">{nav}</div>
+          <div className="sticky top-14">
+            {nav}
+          </div>
         </aside>
 
         {open && (
@@ -157,7 +196,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
           </div>
         )}
 
-        <main className="min-w-0 flex-1 p-4 md:p-6">{children}</main>
+        <main className="min-w-0 flex-1 p-4 md:p-6">
+          {children}
+        </main>
       </div>
     </div>
   );
@@ -178,10 +219,14 @@ export function PageHeader({
         <h1 className="font-display text-2xl text-foreground md:text-3xl">
           {title}
         </h1>
+
         {description && (
-          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {description}
+          </p>
         )}
       </div>
+
       {action}
     </div>
   );
