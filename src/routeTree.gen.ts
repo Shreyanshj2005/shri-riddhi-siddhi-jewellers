@@ -37,6 +37,7 @@ import { Route as AdminappAdminEnquiriesRouteImport } from './routes/_adminapp/a
 import { Route as AdminappAdminHeroRouteImport } from './routes/_adminapp/admin.hero'
 import { Route as AdminappAdminOffersRouteImport } from './routes/_adminapp/admin.offers'
 import { Route as AdminappAdminProductsRouteImport } from './routes/_adminapp/admin.products'
+import { Route as AdminappAdminSettingsRouteImport } from './routes/_adminapp/admin.settings'
 import { Route as SiteCollectionSlugRouteImport } from './routes/_site/collection.$slug'
 import { Route as SiteProductsSlugRouteImport } from './routes/_site/products.$slug'
 import { Route as ApiPublicMediaSplatRouteImport } from './routes/api/public/media/$'
@@ -179,6 +180,11 @@ const AdminappAdminProductsRoute = AdminappAdminProductsRouteImport.update({
   path: '/admin/products',
   getParentRoute: () => AdminappRoute,
 } as any)
+const AdminappAdminSettingsRoute = AdminappAdminSettingsRouteImport.update({
+  id: '/admin/settings',
+  path: '/admin/settings',
+  getParentRoute: () => AdminappRoute,
+} as any)
 const SiteCollectionSlugRoute = SiteCollectionSlugRouteImport.update({
   id: '/collection/$slug',
   path: '/collection/$slug',
@@ -221,6 +227,7 @@ export interface FileRoutesByFullPath {
   '/admin/hero': typeof AdminappAdminHeroRoute
   '/admin/offers': typeof AdminappAdminOffersRoute
   '/admin/products': typeof AdminappAdminProductsRoute
+  '/admin/settings': typeof AdminappAdminSettingsRoute
   '/collection/$slug': typeof SiteCollectionSlugRoute
   '/products/$slug': typeof SiteProductsSlugRoute
   '/admin/': typeof AdminappAdminIndexRoute
@@ -252,6 +259,7 @@ export interface FileRoutesByTo {
   '/admin/hero': typeof AdminappAdminHeroRoute
   '/admin/offers': typeof AdminappAdminOffersRoute
   '/admin/products': typeof AdminappAdminProductsRoute
+  '/admin/settings': typeof AdminappAdminSettingsRoute
   '/collection/$slug': typeof SiteCollectionSlugRoute
   '/products/$slug': typeof SiteProductsSlugRoute
   '/admin': typeof AdminappAdminIndexRoute
@@ -286,6 +294,7 @@ export interface FileRoutesById {
   '/_adminapp/admin/hero': typeof AdminappAdminHeroRoute
   '/_adminapp/admin/offers': typeof AdminappAdminOffersRoute
   '/_adminapp/admin/products': typeof AdminappAdminProductsRoute
+  '/_adminapp/admin/settings': typeof AdminappAdminSettingsRoute
   '/_site/collection/$slug': typeof SiteCollectionSlugRoute
   '/_site/products/$slug': typeof SiteProductsSlugRoute
   '/_adminapp/admin/': typeof AdminappAdminIndexRoute
@@ -319,6 +328,7 @@ export interface FileRouteTypes {
     | '/admin/hero'
     | '/admin/offers'
     | '/admin/products'
+    | '/admin/settings'
     | '/collection/$slug'
     | '/products/$slug'
     | '/admin/'
@@ -350,6 +360,7 @@ export interface FileRouteTypes {
     | '/admin/hero'
     | '/admin/offers'
     | '/admin/products'
+    | '/admin/settings'
     | '/collection/$slug'
     | '/products/$slug'
     | '/admin'
@@ -383,6 +394,7 @@ export interface FileRouteTypes {
     | '/_adminapp/admin/hero'
     | '/_adminapp/admin/offers'
     | '/_adminapp/admin/products'
+    | '/_adminapp/admin/settings'
     | '/_site/collection/$slug'
     | '/_site/products/$slug'
     | '/_adminapp/admin/'
@@ -594,6 +606,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminappAdminProductsRouteImport
       parentRoute: typeof AdminappRoute
     }
+    '/_adminapp/admin/settings': {
+      id: '/_adminapp/admin/settings'
+      path: '/admin/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AdminappAdminSettingsRouteImport
+      parentRoute: typeof AdminappRoute
+    }
     '/_site/collection/$slug': {
       id: '/_site/collection/$slug'
       path: '/collection/$slug'
@@ -677,6 +696,7 @@ interface AdminappRouteChildren {
   AdminappAdminHeroRoute: typeof AdminappAdminHeroRoute
   AdminappAdminOffersRoute: typeof AdminappAdminOffersRoute
   AdminappAdminProductsRoute: typeof AdminappAdminProductsRoute
+  AdminappAdminSettingsRoute: typeof AdminappAdminSettingsRoute
   AdminappAdminIndexRoute: typeof AdminappAdminIndexRoute
 }
 
@@ -685,6 +705,7 @@ const AdminappRouteChildren: AdminappRouteChildren = {
   AdminappAdminHeroRoute: AdminappAdminHeroRoute,
   AdminappAdminOffersRoute: AdminappAdminOffersRoute,
   AdminappAdminProductsRoute: AdminappAdminProductsRoute,
+  AdminappAdminSettingsRoute: AdminappAdminSettingsRoute,
   AdminappAdminIndexRoute: AdminappAdminIndexRoute,
 }
 

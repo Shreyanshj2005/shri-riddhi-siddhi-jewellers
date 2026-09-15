@@ -14,6 +14,7 @@ import {
   Tag,
   Video,
   MessageSquare,
+  Settings,
 } from "lucide-react";
 
 const NAV = [
@@ -40,6 +41,18 @@ const NAV = [
   label: "Hero Videos",
   icon: Video,
   exact: true,
+  },
+    { 
+    to: "/admin/enquiries", 
+    label: "Enquiries", 
+    icon: MessageSquare, 
+    exact: true 
+  },
+    {
+    to: "/admin/settings",
+    label: "Account Settings",
+    icon: Settings,
+    exact: true,
   },
   { to: "/admin/enquiries", label: "Enquiries", icon: MessageSquare, exact: true },
 ] as const;

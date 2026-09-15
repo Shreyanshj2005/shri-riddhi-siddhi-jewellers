@@ -14,6 +14,7 @@ import {
 } from "@/components/site/Sections";
 import { ShowroomBlock } from "@/components/site/ShowroomBlock";
 import { OffersCarousel } from "@/components/site/OffersCarousel";
+import FAQ from "@/components/site/FAQ";
 import { OfferBenefits, GoldInvestmentPlan } from "@/components/site/OfferBenefits";
 import { Button } from "@/components/ui/button";
 import { PRICE_RANGES } from "@/lib/filters";
@@ -962,6 +963,8 @@ function HomePage() {
             </div>
           </section>
         )}
+              {/* Frequently Asked Questions */}
+      <FAQ />
 
       {/* Location + contact */}
       {(vis("location") ||
