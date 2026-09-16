@@ -19,9 +19,9 @@ const faqs = [
       "HUID stands for Hallmark Unique Identification. It is a unique six-digit alphanumeric identification number assigned to a hallmarked gold jewellery item. Customers can use the HUID to verify hallmark details through the BIS CARE app.",
   },
   {
-    question: "Why is a GST bill important when purchasing jewellery?",
+    question: "Why is a GST bill necessary when purchasing jewellery?",
     answer:
-      "A GST invoice provides an official record of your jewellery purchase, including the seller’s GSTIN, invoice details, product value and applicable taxes. It is useful for maintaining purchase records and for eligible tax-related requirements.",
+      "A GST bill provides a transparent record of your purchase, including the jewellery’s price, GST, weight, purity, and making charges. It also serves as proof of purchase for future exchange, resale, or warranty needs.",
   },
 ];
 

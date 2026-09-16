@@ -305,7 +305,7 @@ function HomePage() {
               <ul className="mt-10 grid grid-cols-3 gap-4 border-t border-border pt-6 text-center">
                 {[
                   ["IGI / GIA", "Certified"],
-                  ["Natural ", "Grown"],
+                  ["Natural ", "DIAMONDS"],
                   ["D – J", "Colour Range"],
                 ].map(([a, b]) => (
                   <li key={a}>

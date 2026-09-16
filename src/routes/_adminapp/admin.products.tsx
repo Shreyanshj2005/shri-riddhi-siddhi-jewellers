@@ -1554,7 +1554,7 @@ function ProductForm({
                       e.target.value,
                     )
                   }
-                  placeholder="D"
+                  placeholder="VSSI"
                 />
               </Field>
 
@@ -1570,6 +1570,7 @@ function ProductForm({
                   className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
                 >
                   <option value="">Select clarity</option>
+                  <option value="GH">GH</option>
                   <option value="IF">IF</option>
                   <option value="VVS1">VVS1</option>
                   <option value="VVS2">VVS2</option>
