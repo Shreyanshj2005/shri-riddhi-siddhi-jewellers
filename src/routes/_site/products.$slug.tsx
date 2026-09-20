@@ -92,6 +92,37 @@ function ProductView({
   ] = useState(0);
 
   // =========================================================
+  // RING SIZE
+  // =========================================================
+
+  const [
+    selectedRingSize,
+    setSelectedRingSize,
+  ] = useState<string | null>(null);
+
+  const isRingProduct =
+    String(
+      p.category?.slug ?? "",
+    ).toLowerCase() === "rings" ||
+    String(
+      p.category?.name ?? "",
+    ).toLowerCase() === "rings" ||
+    String(
+      p.name ?? "",
+    )
+      .toLowerCase()
+      .includes("ring");
+
+  const ringSizes = Array.isArray(
+    p.ring_sizes,
+  )
+    ? p.ring_sizes.map(
+        (size: unknown) =>
+          String(size),
+      )
+    : [];
+
+  // =========================================================
   // ZOOM STATES
   // =========================================================
 
@@ -125,8 +156,16 @@ function ProductView({
     images[0]?.url ??
     "/images/placeholder-jewellery.jpg";
 
-  const alreadyInCart =
-    isInCart(p.id);
+  // =========================================================
+  // CART CHECK
+  // =========================================================
+
+  const alreadyInCart = isInCart(
+    p.id,
+    isRingProduct
+      ? selectedRingSize ?? undefined
+      : undefined,
+  );
 
   const wishlisted = has(p.id);
 
@@ -272,6 +311,23 @@ function ProductView({
       return;
     }
 
+    // Ring size is mandatory only when
+    // the product has ring sizes configured.
+    if (
+      isRingProduct &&
+      ringSizes.length > 0 &&
+      !selectedRingSize
+    ) {
+      toast.error(
+        "Please select a ring size.",
+        {
+          description:
+            "Choose your required ring size before adding to cart.",
+        },
+      );
+      return;
+    }
+
     addToCart({
       id: p.id,
       name: p.name,
@@ -281,12 +337,23 @@ function ProductView({
         images[0]?.url ?? "",
       metal: p.metal ?? "",
       purity: p.purity ?? "",
+
+      // Ring size
+      selectedRingSize:
+        isRingProduct
+          ? selectedRingSize ??
+            undefined
+          : undefined,
     });
 
     toast.success(
       "Added to cart",
       {
-        description: `${p.name} has been added to your cart.`,
+        description:
+          isRingProduct &&
+          selectedRingSize
+            ? `${p.name} — Size ${selectedRingSize}`
+            : `${p.name} has been added to your cart.`,
       },
     );
   };
@@ -434,8 +501,10 @@ function ProductView({
 
           <div>
             {/* MAIN IMAGE */}
+
             <div className="group relative overflow-hidden rounded-2xl border bg-muted">
               {/* Zoom button */}
+
               <button
                 type="button"
                 onClick={
@@ -448,6 +517,7 @@ function ProductView({
               </button>
 
               {/* Fullscreen button */}
+
               <button
                 type="button"
                 onClick={
@@ -460,6 +530,7 @@ function ProductView({
               </button>
 
               {/* Click image to zoom */}
+
               <button
                 type="button"
                 onClick={
@@ -476,6 +547,7 @@ function ProductView({
               </button>
 
               {/* Previous image */}
+
               {images.length >
                 1 && (
                 <button
@@ -491,6 +563,7 @@ function ProductView({
               )}
 
               {/* Next image */}
+
               {images.length >
                 1 && (
                 <button
@@ -507,6 +580,7 @@ function ProductView({
             </div>
 
             {/* Zoom hint */}
+
             <p className="mt-3 text-center text-xs text-muted-foreground">
               Click the image to zoom
             </p>
@@ -570,6 +644,7 @@ function ProductView({
 
           <div className="flex flex-col">
             {/* New badge */}
+
             {p.is_new && (
               <span className="mb-3 w-fit rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
                 NEW
@@ -577,11 +652,13 @@ function ProductView({
             )}
 
             {/* Product name */}
+
             <h1 className="font-serif text-3xl font-medium md:text-4xl">
               {p.name}
             </h1>
 
             {/* SKU */}
+
             {p.sku && (
               <p className="mt-2 text-sm text-muted-foreground">
                 SKU: {p.sku}
@@ -589,6 +666,7 @@ function ProductView({
             )}
 
             {/* Rating */}
+
             <div className="mt-4 flex items-center gap-2">
               <div className="flex">
                 {Array.from({
@@ -607,6 +685,7 @@ function ProductView({
             </div>
 
             {/* Price */}
+
             <div className="mt-6">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="text-3xl font-semibold">
@@ -655,6 +734,7 @@ function ProductView({
             </div>
 
             {/* Basic Details */}
+
             <div className="mt-8 grid grid-cols-2 gap-4 border-y py-6">
               {p.metal && (
                 <div>
@@ -732,7 +812,88 @@ function ProductView({
               )}
             </div>
 
-            {/* Diamond Details */}
+            {/* =================================================
+                RING SIZE SELECTOR
+            ================================================== */}
+
+            {isRingProduct &&
+              ringSizes.length > 0 && (
+                <div className="mt-8 rounded-2xl border bg-background p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h2 className="font-serif text-xl">
+                        Select Ring Size
+                      </h2>
+
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Choose your preferred
+                        ring size
+                      </p>
+                    </div>
+
+                    {selectedRingSize && (
+                      <span className="shrink-0 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
+                        Size{" "}
+                        {
+                          selectedRingSize
+                        }
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mt-5 grid grid-cols-4 gap-3 sm:grid-cols-5 md:grid-cols-6">
+                    {ringSizes.map(
+                      (size) => {
+                        const isSelected =
+                          selectedRingSize ===
+                          size;
+
+                        return (
+                          <button
+                            key={
+                              size
+                            }
+                            type="button"
+                            onClick={() =>
+                              setSelectedRingSize(
+                                size,
+                              )
+                            }
+                            className={`relative flex h-12 items-center justify-center rounded-xl border-2 text-sm font-medium transition-all ${
+                              isSelected
+                                ? "border-primary bg-primary text-primary-foreground shadow-md"
+                                : "border-border bg-background hover:border-primary hover:bg-primary/5"
+                            }`}
+                            aria-pressed={
+                              isSelected
+                            }
+                            aria-label={`Select ring size ${size}`}
+                          >
+                            {
+                              size
+                            }
+
+                            {isSelected && (
+                              <Check className="absolute right-1 top-1 h-3 w-3" />
+                            )}
+                          </button>
+                        );
+                      },
+                    )}
+                  </div>
+
+                  <p className="mt-4 text-xs leading-5 text-muted-foreground">
+                    Need help choosing your
+                    size? Contact our jewellery
+                    team.
+                  </p>
+                </div>
+              )}
+
+            {/* =================================================
+                DIAMOND DETAILS
+            ================================================== */}
+
             {(p.diamond_type ||
               p.diamond_carat ||
               p.diamond_shape ||
@@ -877,7 +1038,10 @@ function ProductView({
               </div>
             )}
 
-            {/* Description */}
+            {/* =================================================
+                DESCRIPTION
+            ================================================== */}
+
             {p.description && (
               <div className="mt-8">
                 <h2 className="font-serif text-xl">
@@ -932,6 +1096,7 @@ function ProductView({
               )}
 
               {/* Wishlist */}
+
               <Button
                 type="button"
                 variant="outline"
@@ -954,9 +1119,7 @@ function ProductView({
                   : "Add To Wishlist"}
               </Button>
 
-              {/* =================================================
-                  VIDEO CALL BUTTON
-              ================================================== */}
+              {/* Video Call */}
 
               <Button
                 type="button"
@@ -977,6 +1140,7 @@ function ProductView({
 
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
               {/* WhatsApp */}
+
               <Button
                 asChild
                 variant="outline"
@@ -992,6 +1156,7 @@ function ProductView({
               </Button>
 
               {/* Call */}
+
               <Button
                 asChild
                 variant="outline"
@@ -1003,6 +1168,7 @@ function ProductView({
               </Button>
 
               {/* Visit */}
+
               <Button
                 asChild
                 variant="outline"
@@ -1019,6 +1185,7 @@ function ProductView({
             </div>
 
             {/* Share */}
+
             <div className="mt-6 flex gap-2">
               <Button
                 type="button"
@@ -1046,6 +1213,7 @@ function ProductView({
             </div>
 
             {/* Benefits */}
+
             <div className="mt-8 space-y-3 rounded-2xl border p-5">
               <div className="flex items-center gap-3">
                 <Check className="h-5 w-5 text-primary" />
@@ -1097,6 +1265,7 @@ function ProductView({
             }
           >
             {/* Modal Header */}
+
             <div className="relative bg-black px-6 py-7 text-white">
               <button
                 type="button"
@@ -1127,8 +1296,10 @@ function ProductView({
             </div>
 
             {/* Modal Body */}
+
             <div className="p-6">
               {/* Product */}
+
               <div className="mb-6 flex gap-4 rounded-2xl border bg-gray-50 p-4">
                 <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-gray-100">
                   <img
@@ -1155,10 +1326,21 @@ function ProductView({
                       "en-IN",
                     )}
                   </p>
+
+                  {isRingProduct &&
+                    selectedRingSize && (
+                      <p className="mt-1 text-sm font-medium text-primary">
+                        Ring Size:{" "}
+                        {
+                          selectedRingSize
+                        }
+                      </p>
+                    )}
                 </div>
               </div>
 
               {/* WhatsApp Video */}
+
               <button
                 type="button"
                 onClick={
@@ -1186,6 +1368,7 @@ function ProductView({
               </button>
 
               {/* Phone Call */}
+
               <a
                 href="tel:+919653069612"
                 onClick={
@@ -1212,6 +1395,7 @@ function ProductView({
               </a>
 
               {/* WhatsApp Enquiry */}
+
               <a
                 href={`https://wa.me/919653069612?text=${encodeURIComponent(
                   `Hello, I want to book a video consultation for ${p.name}. Product link: ${window.location.href}`,
@@ -1264,6 +1448,7 @@ function ProductView({
           }
         >
           {/* Close */}
+
           <button
             type="button"
             onClick={
@@ -1276,6 +1461,7 @@ function ProductView({
           </button>
 
           {/* Counter */}
+
           {images.length >
             1 && (
             <div className="absolute left-1/2 top-5 z-[110] -translate-x-1/2 rounded-full bg-white/90 px-4 py-2 text-sm font-medium text-black">
@@ -1286,6 +1472,7 @@ function ProductView({
           )}
 
           {/* Zoom controls */}
+
           <div className="absolute bottom-5 left-1/2 z-[110] flex -translate-x-1/2 items-center gap-2 rounded-full bg-white p-2 shadow-xl">
             <button
               type="button"
@@ -1347,6 +1534,7 @@ function ProductView({
           </div>
 
           {/* Previous */}
+
           {images.length >
             1 && (
             <button
@@ -1365,6 +1553,7 @@ function ProductView({
           )}
 
           {/* Next */}
+
           {images.length >
             1 && (
             <button
@@ -1383,6 +1572,7 @@ function ProductView({
           )}
 
           {/* Zoom image */}
+
           <div
             className="flex h-full w-full items-center justify-center overflow-hidden"
             onClick={(
@@ -1406,6 +1596,7 @@ function ProductView({
           </div>
 
           {/* Hint */}
+
           <div className="absolute bottom-20 left-1/2 -translate-x-1/2 text-center text-xs text-white/80">
             Use + / − or mouse wheel
             to zoom

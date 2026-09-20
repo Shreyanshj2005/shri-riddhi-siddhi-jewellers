@@ -36,7 +36,8 @@ Deno.serve(async () => {
       .trim();
 
     /*
-      IBJA table:
+      Expected IBJA table:
+
       Date
       Gold 999
       Gold 995
@@ -45,10 +46,10 @@ Deno.serve(async () => {
       Gold 585
       Silver 999
 
-      Gold = ₹ / 10g
+      Gold   = ₹ / 10g
       Silver = ₹ / kg
 
-      We use the latest available PM row.
+      We use the latest available row.
     */
 
     const rowRegex =
@@ -60,7 +61,7 @@ Deno.serve(async () => {
       throw new Error("Could not find IBJA daily rate rows");
     }
 
-    // Latest row available on the page.
+    // First matched row = latest available row on the page
     const match = rows[0];
 
     const [
@@ -75,9 +76,14 @@ Deno.serve(async () => {
     ] = match;
 
     const rates = {
+      // IBJA gold is ₹ / 10g
+      // SRSJ rates table is ₹ / gram
       gold_24k: parseNumber(gold999) / 10,
       gold_22k: parseNumber(gold916) / 10,
       gold_18k: parseNumber(gold750) / 10,
+
+      // IBJA silver is ₹ / kg
+      // SRSJ rates table is ₹ / gram
       silver: parseNumber(silver999) / 1000,
     };
 

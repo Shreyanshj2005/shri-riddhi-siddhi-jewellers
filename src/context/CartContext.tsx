@@ -15,6 +15,9 @@ export type CartProduct = {
   image?: string | null;
   metal?: string | null;
   purity?: string | null;
+
+  // Ring size selected by customer
+  selectedRingSize?: string | null;
 };
 
 export type CartItem = {
@@ -26,12 +29,30 @@ type CartContextType = {
   items: CartItem[];
   cartCount: number;
   cartTotal: number;
+
   addToCart: (product: CartProduct) => void;
-  removeFromCart: (productId: string) => void;
-  increaseQuantity: (productId: string) => void;
-  decreaseQuantity: (productId: string) => void;
+
+  removeFromCart: (
+    productId: string,
+    selectedRingSize?: string | null
+  ) => void;
+
+  increaseQuantity: (
+    productId: string,
+    selectedRingSize?: string | null
+  ) => void;
+
+  decreaseQuantity: (
+    productId: string,
+    selectedRingSize?: string | null
+  ) => void;
+
   clearCart: () => void;
-  isInCart: (productId: string) => boolean;
+
+  isInCart: (
+    productId: string,
+    selectedRingSize?: string | null
+  ) => boolean;
 };
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -48,7 +69,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
       const saved = localStorage.getItem(STORAGE_KEY);
 
       if (saved) {
-        setItems(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+
+        if (Array.isArray(parsed)) {
+          setItems(parsed);
+        }
       }
     } catch (error) {
       console.error("Failed to load cart:", error);
@@ -57,7 +82,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Save cart
+  // Save cart to localStorage
   useEffect(() => {
     if (!loaded) return;
 
@@ -68,15 +93,38 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, [items, loaded]);
 
+  /**
+   * Check whether two cart items represent the same variant.
+   *
+   * For normal products:
+   * product ID is enough.
+   *
+   * For rings:
+   * product ID + selected ring size must match.
+   */
+  const isSameCartVariant = (
+    item: CartItem,
+    product: CartProduct
+  ) => {
+    return (
+      item.product.id === product.id &&
+      (item.product.selectedRingSize ?? null) ===
+        (product.selectedRingSize ?? null)
+    );
+  };
+
+  // Add product to cart
   const addToCart = (product: CartProduct) => {
     setItems((current) => {
-      const existing = current.find(
-        (item) => item.product.id === product.id
+      const existing = current.find((item) =>
+        isSameCartVariant(item, product)
       );
 
+      // Same product + same ring size
+      // => increase quantity
       if (existing) {
         return current.map((item) =>
-          item.product.id === product.id
+          isSameCartVariant(item, product)
             ? {
                 ...item,
                 quantity: item.quantity + 1,
@@ -85,6 +133,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
         );
       }
 
+      // Same product + different ring size
+      // => create separate cart item
       return [
         ...current,
         {
@@ -95,16 +145,33 @@ export function CartProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const removeFromCart = (productId: string) => {
+  // Remove product variant from cart
+  const removeFromCart = (
+    productId: string,
+    selectedRingSize?: string | null
+  ) => {
     setItems((current) =>
-      current.filter((item) => item.product.id !== productId)
+      current.filter(
+        (item) =>
+          !(
+            item.product.id === productId &&
+            (item.product.selectedRingSize ?? null) ===
+              (selectedRingSize ?? null)
+          )
+      )
     );
   };
 
-  const increaseQuantity = (productId: string) => {
+  // Increase quantity of a specific product variant
+  const increaseQuantity = (
+    productId: string,
+    selectedRingSize?: string | null
+  ) => {
     setItems((current) =>
       current.map((item) =>
-        item.product.id === productId
+        item.product.id === productId &&
+        (item.product.selectedRingSize ?? null) ===
+          (selectedRingSize ?? null)
           ? {
               ...item,
               quantity: item.quantity + 1,
@@ -114,11 +181,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
     );
   };
 
-  const decreaseQuantity = (productId: string) => {
+  // Decrease quantity of a specific product variant
+  const decreaseQuantity = (
+    productId: string,
+    selectedRingSize?: string | null
+  ) => {
     setItems((current) =>
       current
         .map((item) =>
-          item.product.id === productId
+          item.product.id === productId &&
+          (item.product.selectedRingSize ?? null) ===
+            (selectedRingSize ?? null)
             ? {
                 ...item,
                 quantity: item.quantity - 1,
@@ -129,23 +202,41 @@ export function CartProvider({ children }: { children: ReactNode }) {
     );
   };
 
+  // Clear entire cart
   const clearCart = () => {
     setItems([]);
   };
 
-  const isInCart = (productId: string) => {
-    return items.some((item) => item.product.id === productId);
+  // Check whether a specific product variant is already in cart
+  const isInCart = (
+    productId: string,
+    selectedRingSize?: string | null
+  ) => {
+    return items.some(
+      (item) =>
+        item.product.id === productId &&
+        (item.product.selectedRingSize ?? null) ===
+          (selectedRingSize ?? null)
+    );
   };
 
+  // Total quantity of products
   const cartCount = useMemo(
-    () => items.reduce((total, item) => total + item.quantity, 0),
+    () =>
+      items.reduce(
+        (total, item) => total + item.quantity,
+        0
+      ),
     [items]
   );
 
+  // Total cart price
   const cartTotal = useMemo(
     () =>
       items.reduce(
-        (total, item) => total + Number(item.product.price) * item.quantity,
+        (total, item) =>
+          total +
+          Number(item.product.price) * item.quantity,
         0
       ),
     [items]
@@ -177,7 +268,9 @@ export function useCart() {
   const context = useContext(CartContext);
 
   if (!context) {
-    throw new Error("useCart must be used inside CartProvider");
+    throw new Error(
+      "useCart must be used inside CartProvider"
+    );
   }
 
   return context;

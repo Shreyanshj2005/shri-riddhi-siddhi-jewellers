@@ -255,6 +255,11 @@ function CheckoutPage() {
               product_image:
                 item.product.image ||
                 undefined,
+
+              // Ring size
+              ring_size:
+                item.product.selectedRingSize ||
+                undefined,
             })),
           },
         });
@@ -346,9 +351,6 @@ function CheckoutPage() {
        *
        * The server gets the authenticated user ID
        * from requireSupabaseAuth -> context.userId.
-       *
-       * This prevents a customer from changing
-       * another customer's ID from the browser.
        */
 
       const result =
@@ -431,6 +433,11 @@ function CheckoutPage() {
 
                 product_image:
                   item.product.image ||
+                  undefined,
+
+                // Ring size
+                ring_size:
+                  item.product.selectedRingSize ||
                   undefined,
               }),
             ),
@@ -934,7 +941,7 @@ function CheckoutPage() {
               <div className="space-y-4">
                 {items.map((item) => (
                   <div
-                    key={item.product.id}
+                    key={`${item.product.id}-${item.product.selectedRingSize ?? "default"}`}
                     className="flex gap-4"
                   >
                     {/* Product Image */}
@@ -963,6 +970,21 @@ function CheckoutPage() {
                       <p className="font-medium">
                         {item.product.name}
                       </p>
+
+                      {/* Ring Size */}
+
+                      {item.product
+                        .selectedRingSize && (
+                        <p className="mt-1 text-sm font-medium text-black">
+                          Ring Size:{" "}
+                          <span className="text-gray-600">
+                            {
+                              item.product
+                                .selectedRingSize
+                            }
+                          </span>
+                        </p>
+                      )}
 
                       <p className="mt-1 text-sm text-gray-500">
                         Qty:{" "}

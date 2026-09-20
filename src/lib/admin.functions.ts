@@ -419,6 +419,10 @@ export const adminGetProduct = createServerFn({
     };
   });
 
+/* =========================================================
+   PRODUCT PAYLOAD
+========================================================= */
+
 export interface ProductPayload {
   id?: string;
 
@@ -437,6 +441,17 @@ export interface ProductPayload {
   purity?: string | null;
   gender?: string | null;
   stone?: string | null;
+
+  /*
+   * RING SIZES
+   *
+   * Example:
+   * ["8", "9", "10", "11", "12"]
+   *
+   * NULL / empty array can be used for
+   * non-ring products.
+   */
+  ring_sizes?: string[] | null;
 
   occasions: string[];
   style?: string | null;
@@ -476,6 +491,10 @@ export interface ProductPayload {
   }[];
 }
 
+/* =========================================================
+   SAVE PRODUCT
+========================================================= */
+
 export const adminSaveProduct = createServerFn({
   method: "POST",
 })
@@ -495,6 +514,28 @@ export const adminSaveProduct = createServerFn({
 
     if (i.price == null || i.price < 0) {
       throw new Error("Price is required");
+    }
+
+    /*
+     * Normalize ring sizes.
+     *
+     * This makes sure:
+     * - numbers become strings
+     * - blank values are removed
+     * - duplicate sizes are removed
+     */
+    if (Array.isArray(i.ring_sizes)) {
+      i.ring_sizes = Array.from(
+        new Set(
+          i.ring_sizes
+            .map((size) =>
+              String(size).trim(),
+            )
+            .filter(Boolean),
+        ),
+      );
+    } else {
+      i.ring_sizes = null;
     }
 
     return i;
@@ -593,6 +634,26 @@ export const adminSaveProduct = createServerFn({
         normalizedSku || null;
     }
 
+    /*
+     * RING SIZES NORMALIZATION
+     *
+     * Product table receives:
+     * ring_sizes: string[] | null
+     */
+    if (Array.isArray(fields.ring_sizes)) {
+      fields.ring_sizes = Array.from(
+        new Set(
+          fields.ring_sizes
+            .map((size) =>
+              String(size).trim(),
+            )
+            .filter(Boolean),
+        ),
+      );
+    } else {
+      fields.ring_sizes = null;
+    }
+
     /* -----------------------------------------
        UPDATE / CREATE
     ----------------------------------------- */
@@ -602,7 +663,7 @@ export const adminSaveProduct = createServerFn({
         data: before,
       } = await sb
         .from("products")
-        .select("price,status")
+        .select("price,status,ring_sizes")
         .eq("id", id)
         .maybeSingle();
 
@@ -654,6 +715,46 @@ export const adminSaveProduct = createServerFn({
           },
         );
       }
+
+      /*
+       * Log ring size changes
+       */
+      const beforeSizes =
+        Array.isArray(
+          before?.ring_sizes,
+        )
+          ? before.ring_sizes
+          : [];
+
+      const afterSizes =
+        Array.isArray(
+          fields.ring_sizes,
+        )
+          ? fields.ring_sizes
+          : [];
+
+      if (
+        JSON.stringify(
+          beforeSizes,
+        ) !==
+        JSON.stringify(
+          afterSizes,
+        )
+      ) {
+        await logAudit(
+          {
+            supabase:
+              sb as unknown as AdminSb,
+          },
+          "ring_sizes_change",
+          "product",
+          id,
+          {
+            from: beforeSizes,
+            to: afterSizes,
+          },
+        );
+      }
     } else {
       const {
         data: created,
@@ -680,6 +781,8 @@ export const adminSaveProduct = createServerFn({
         productId,
         {
           name: fields.name,
+          ring_sizes:
+            fields.ring_sizes ?? null,
         },
       );
     }
@@ -997,6 +1100,14 @@ export const adminProductAction =
                 .toString(36)
                 .slice(-4);
 
+            /*
+             * ring_sizes is already inside `rest`
+             * because it belongs to products table.
+             *
+             * Therefore duplicated ring products
+             * retain their available ring sizes.
+             */
+
             const {
               data: created,
               error,
@@ -1130,7 +1241,7 @@ export const adminProductAction =
                     boolean
                   >
                 )[col],
-              })
+          })
               .eq("id", id);
           }
         }
@@ -2418,6 +2529,11 @@ export const createCustomerEnquiry =
           unit_price: number;
           total_price: number;
           product_image?: string;
+
+          /*
+           * Ring size selected by customer.
+           */
+          ring_size?: string | null;
         }>;
       }) => data,
     )
@@ -2549,6 +2665,10 @@ export const createCustomerEnquiry =
           );
         }
 
+        /* -----------------------------------------
+           ENQUIRY ITEMS
+        ----------------------------------------- */
+
         const enquiryItems =
           data.items.map(
             (item) => ({
@@ -2573,6 +2693,13 @@ export const createCustomerEnquiry =
 
               product_image:
                 item.product_image ??
+                null,
+
+              /*
+               * SAVE RING SIZE INSIDE cart_items JSON
+               */
+              ring_size:
+                item.ring_size ??
                 null,
             }),
           );
@@ -2637,6 +2764,10 @@ export const createCustomerEnquiry =
               status:
                 "new",
 
+              /*
+               * ring_size is preserved
+               * inside cart_items JSON.
+               */
               cart_items:
                 enquiryItems,
             })
@@ -2698,6 +2829,11 @@ export const createCustomerOrder =
           unit_price: number;
           total_price: number;
           product_image?: string;
+
+          /*
+           * Ring size selected by customer.
+           */
+          ring_size?: string | null;
         }>;
       }) => data,
     )
@@ -2756,7 +2892,7 @@ export const createCustomerOrder =
 
         /* =========================================
            2. CUSTOMER PROFILE
-           
+
            IMPORTANT:
            CustomerAuthPopup + Admin Customers
            dono customer_profiles use karte hain.
@@ -2996,7 +3132,8 @@ export const createCustomerOrder =
               customer_id:
                 customerId,
 
-              user_id: customerId,  
+              user_id:
+                customerId,
 
               customer_name:
                 data.customer_name.trim(),
@@ -3080,10 +3217,13 @@ export const createCustomerOrder =
 
         /* =========================================
            6. SAVE ORDER ITEMS
-           
+
            IMPORTANT DB SCHEMA:
            total_price EXISTS
            subtotal DOES NOT EXIST
+
+           RING SIZE:
+           order_items.ring_size
         ========================================= */
 
         const orderItems =
@@ -3119,6 +3259,13 @@ export const createCustomerOrder =
 
               product_image:
                 item.product_image ??
+                null,
+
+              /*
+               * SAVE SELECTED RING SIZE
+               */
+              ring_size:
+                item.ring_size ??
                 null,
             }),
           );
@@ -3410,6 +3557,9 @@ export const getAdminOrders =
                 unit_price,
                 total_price,
                 product_image,
+
+                ring_size,
+
                 created_at
               `)
               .in(
@@ -3601,10 +3751,11 @@ export const getAdminCustomers =
 
         /* -----------------------------------------
            ORDER ITEMS
-           
+
            IMPORTANT:
            total_price
            product_image
+           ring_size
         ----------------------------------------- */
 
         let orderItems: any[] =
@@ -3633,6 +3784,9 @@ export const getAdminCustomers =
                   unit_price,
                   total_price,
                   product_image,
+
+                  ring_size,
+
                   created_at
                 `,
               )

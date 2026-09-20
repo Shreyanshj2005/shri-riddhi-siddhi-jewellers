@@ -83,20 +83,14 @@ function CartPage() {
         {/* Header */}
         <div className="mb-10 flex items-center justify-between gap-4">
           <div>
-            <p className="eyebrow">
-              Your Selection
-            </p>
+            <p className="eyebrow">Your Selection</p>
 
             <h1 className="mt-2 font-serif text-4xl sm:text-5xl">
               Shopping Cart
             </h1>
 
             <p className="mt-2 text-sm text-muted-foreground">
-              {cartCount}{" "}
-              {cartCount === 1
-                ? "item"
-                : "items"}{" "}
-              in your cart
+              {cartCount} {cartCount === 1 ? "item" : "items"} in your cart
             </p>
           </div>
 
@@ -118,15 +112,13 @@ function CartPage() {
             {items.map((item) => {
               const { product } = item;
 
-              const itemPrice =
-                Number(product.price) || 0;
+              const itemPrice = Number(product.price) || 0;
 
-              const itemTotal =
-                itemPrice * item.quantity;
+              const itemTotal = itemPrice * item.quantity;
 
               return (
                 <div
-                  key={product.id}
+                  key={`${product.id}-${product.selectedRingSize ?? "default"}`}
                   className="flex gap-4 border-b border-border pb-5"
                 >
                   {/* Image */}
@@ -163,15 +155,21 @@ function CartPage() {
                         {product.name}
                       </Link>
 
-                      {(product.metal ||
-                        product.purity) && (
+                      {(product.metal || product.purity) && (
                         <p className="mt-1 text-xs uppercase tracking-wider text-muted-foreground">
-                          {[
-                            product.metal,
-                            product.purity,
-                          ]
+                          {[product.metal, product.purity]
                             .filter(Boolean)
                             .join(" • ")}
+                        </p>
+                      )}
+
+                      {/* Ring Size */}
+                      {product.selectedRingSize && (
+                        <p className="mt-2 text-sm font-medium">
+                          Ring Size:{" "}
+                          <span className="text-primary">
+                            {product.selectedRingSize}
+                          </span>
                         </p>
                       )}
 
@@ -188,6 +186,7 @@ function CartPage() {
                           onClick={() =>
                             decreaseQuantity(
                               product.id,
+                              product.selectedRingSize
                             )
                           }
                           className="flex h-9 w-9 items-center justify-center hover:bg-muted"
@@ -205,6 +204,7 @@ function CartPage() {
                           onClick={() =>
                             increaseQuantity(
                               product.id,
+                              product.selectedRingSize
                             )
                           }
                           className="flex h-9 w-9 items-center justify-center hover:bg-muted"
@@ -220,6 +220,7 @@ function CartPage() {
                         onClick={() =>
                           removeFromCart(
                             product.id,
+                            product.selectedRingSize
                           )
                         }
                         className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-destructive"
@@ -233,9 +234,7 @@ function CartPage() {
                   {/* Item total */}
                   <div className="hidden text-right sm:block">
                     <p className="font-medium">
-                      {formatPrice(
-                        itemTotal,
-                      )}
+                      {formatPrice(itemTotal)}
                     </p>
                   </div>
                 </div>
@@ -244,10 +243,7 @@ function CartPage() {
 
             {/* Continue shopping */}
             <div className="pt-4">
-              <Button
-                asChild
-                variant="ghost"
-              >
+              <Button asChild variant="ghost">
                 <Link to="/jewellery">
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   Continue Shopping
@@ -261,9 +257,7 @@ function CartPage() {
           {/* ================================================== */}
 
           <aside className="h-fit border border-border bg-card p-6 sm:p-8">
-            <p className="eyebrow">
-              Order Summary
-            </p>
+            <p className="eyebrow">Order Summary</p>
 
             <h2 className="mt-2 font-serif text-2xl">
               Your Jewellery
@@ -272,16 +266,14 @@ function CartPage() {
             {/* Mini item list */}
             <div className="mt-6 space-y-4 border-b border-border pb-6">
               {items.map((item) => {
-                const { product } =
-                  item;
+                const { product } = item;
 
                 const itemTotal =
-                  Number(product.price) *
-                  item.quantity;
+                  Number(product.price) * item.quantity;
 
                 return (
                   <div
-                    key={product.id}
+                    key={`${product.id}-${product.selectedRingSize ?? "default"}`}
                     className="flex items-center justify-between gap-3 text-sm"
                   >
                     <div className="min-w-0">
@@ -289,15 +281,19 @@ function CartPage() {
                         {product.name}
                       </p>
 
+                      {product.selectedRingSize && (
+                        <p className="text-xs text-primary">
+                          Ring Size: {product.selectedRingSize}
+                        </p>
+                      )}
+
                       <p className="text-xs text-muted-foreground">
                         Qty: {item.quantity}
                       </p>
                     </div>
 
                     <span className="shrink-0">
-                      {formatPrice(
-                        itemTotal,
-                      )}
+                      {formatPrice(itemTotal)}
                     </span>
                   </div>
                 );
@@ -311,11 +307,7 @@ function CartPage() {
                   Subtotal
                 </span>
 
-                <span>
-                  {formatPrice(
-                    cartTotal,
-                  )}
-                </span>
+                <span>{formatPrice(cartTotal)}</span>
               </div>
 
               <div className="flex justify-between text-sm">
@@ -323,9 +315,7 @@ function CartPage() {
                   Shipping
                 </span>
 
-                <span>
-                  To be calculated
-                </span>
+                <span>To be calculated</span>
               </div>
             </div>
 
@@ -336,9 +326,7 @@ function CartPage() {
               </span>
 
               <span className="text-xl font-semibold">
-                {formatPrice(
-                  cartTotal,
-                )}
+                {formatPrice(cartTotal)}
               </span>
             </div>
 

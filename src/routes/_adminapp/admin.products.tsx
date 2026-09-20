@@ -75,7 +75,12 @@ function ProductsPage() {
       }),
   });
 
-  const { data: lookups, isError: lookupsError, error: lookupsErrorDetail, refetch: refetchLookups } = useQuery({
+  const {
+    data: lookups,
+    isError: lookupsError,
+    error: lookupsErrorDetail,
+    refetch: refetchLookups,
+  } = useQuery({
     queryKey: ["admin", "lookups"],
     queryFn: () => adminGetLookups(),
     enabled: showForm,
@@ -211,7 +216,12 @@ function ProductsPage() {
         title="Products"
         description="Manage your jewellery catalogue, pricing, visibility and stock."
         action={
-          <Button onClick={() => setShowForm(true)}>
+          <Button
+            onClick={() => {
+              setEditProductId(null);
+              setShowForm(true);
+            }}
+          >
             <Plus className="mr-2 h-4 w-4" />
             Add Product
           </Button>
@@ -686,7 +696,13 @@ function ProductsPage() {
           productId={editProductId}
           categories={lookups?.categories ?? []}
           collections={lookups?.collections ?? []}
-          lookupError={lookupsError ? (lookupsErrorDetail instanceof Error ? lookupsErrorDetail.message : "Unable to load categories and collections") : null}
+          lookupError={
+            lookupsError
+              ? lookupsErrorDetail instanceof Error
+                ? lookupsErrorDetail.message
+                : "Unable to load categories and collections"
+              : null
+          }
           onRetryLookups={() => void refetchLookups()}
           onClose={() => {
             setShowForm(false);
@@ -711,7 +727,7 @@ function ProductsPage() {
 }
 
 /* =========================================================
-   ADD PRODUCT FORM
+   ADD / EDIT PRODUCT FORM
 ========================================================= */
 
 function ProductForm({
@@ -741,7 +757,11 @@ function ProductForm({
 }) {
   const [saving, setSaving] = useState(false);
 
-  const { data: existingProduct, isLoading: loadingProduct, error: productError } = useQuery({
+  const {
+    data: existingProduct,
+    isLoading: loadingProduct,
+    error: productError,
+  } = useQuery({
     queryKey: ["admin-product", productId],
     queryFn: () => adminGetProduct({ data: { id: productId! } }),
     enabled: Boolean(productId),
@@ -763,6 +783,9 @@ function ProductForm({
     stone: "",
     occasions: "",
     style: "",
+
+    /* Ring sizes */
+    ring_sizes: [] as string[],
 
     diamond_type: "",
     diamond_shape: "",
@@ -811,41 +834,85 @@ function ProductForm({
       category_id: p.category_id ?? "",
       subcategory_id: p.subcategory_id ?? "",
       price: p.price != null ? String(p.price) : "",
-      original_price: p.original_price != null ? String(p.original_price) : "",
+      original_price:
+        p.original_price != null
+          ? String(p.original_price)
+          : "",
       offer_label: p.offer_label ?? "",
+
       metal: p.metal ?? "",
       purity: p.purity ?? "",
       gender: p.gender ?? "",
       stone: p.stone ?? "",
-      occasions: Array.isArray(p.occasions) ? p.occasions.join(", ") : "",
+      occasions: Array.isArray(p.occasions)
+        ? p.occasions.join(", ")
+        : "",
       style: p.style ?? "",
+
+      /* Load existing ring sizes */
+      ring_sizes: Array.isArray(p.ring_sizes)
+        ? p.ring_sizes.map((size: unknown) =>
+            String(size),
+          )
+        : [],
+
       diamond_type: p.diamond_type ?? "",
       diamond_shape: p.diamond_shape ?? "",
-      diamond_carat: p.diamond_carat != null ? String(p.diamond_carat) : "",
+      diamond_carat:
+        p.diamond_carat != null
+          ? String(p.diamond_carat)
+          : "",
       diamond_colour: p.diamond_colour ?? "",
       diamond_clarity: p.diamond_clarity ?? "",
       cut: p.cut ?? "",
       certification: p.certification ?? "",
       num_stones: p.num_stones ?? "",
-      total_diamond_weight: p.total_diamond_weight != null ? String(p.total_diamond_weight) : "",
-      product_weight: p.product_weight != null ? String(p.product_weight) : "",
+      total_diamond_weight:
+        p.total_diamond_weight != null
+          ? String(p.total_diamond_weight)
+          : "",
+
+      product_weight:
+        p.product_weight != null
+          ? String(p.product_weight)
+          : "",
+
       description: p.description ?? "",
-      tags: Array.isArray(p.tags) ? p.tags.join(", ") : "",
+
+      tags: Array.isArray(p.tags)
+        ? p.tags.join(", ")
+        : "",
+
       featured: Boolean(p.featured),
       best_seller: Boolean(p.best_seller),
       is_new: Boolean(p.is_new),
+
       status: p.status ?? "draft",
-      stock_status: p.stock_status ?? "in_stock",
+      stock_status:
+        p.stock_status ?? "in_stock",
+
       seo_title: p.seo_title ?? "",
-      seo_description: p.seo_description ?? "",
-      collectionIds: existingProduct.collectionIds ?? [],
+      seo_description:
+        p.seo_description ?? "",
+
+      collectionIds:
+        existingProduct.collectionIds ?? [],
+
       images: Array.isArray(p.images)
-        ? p.images.map((image: any, index: number) => ({
-            id: image.id,
-            url: image.url,
-            path: image.storage_path ?? "",
-            name: image.alt || `Image ${index + 1}`,
-          }))
+        ? p.images.map(
+            (
+              image: any,
+              index: number,
+            ) => ({
+              id: image.id,
+              url: image.url,
+              path:
+                image.storage_path ?? "",
+              name:
+                image.alt ||
+                `Image ${index + 1}`,
+            }),
+          )
         : [],
     });
   }, [existingProduct]);
@@ -886,7 +953,8 @@ function ProductForm({
       return;
     }
 
-    const slug = form.slug.trim() || makeSlug(form.name);
+    const slug =
+      form.slug.trim() || makeSlug(form.name);
 
     if (!slug) {
       toast.error("Product link is required");
@@ -899,8 +967,11 @@ function ProductForm({
       await adminSaveProduct({
         data: {
           id: productId || undefined,
+
           name: form.name.trim(),
+
           slug,
+
           sku: form.sku.trim() || null,
 
           category_id:
@@ -939,6 +1010,12 @@ function ProductForm({
           style:
             form.style.trim() || null,
 
+          /* Save ring sizes */
+          ring_sizes:
+            form.ring_sizes.length > 0
+              ? form.ring_sizes
+              : null,
+
           diamond_type:
             form.diamond_type.trim() || null,
 
@@ -967,7 +1044,9 @@ function ProductForm({
 
           total_diamond_weight:
             form.total_diamond_weight.trim()
-              ? Number(form.total_diamond_weight)
+              ? Number(
+                  form.total_diamond_weight,
+                )
               : null,
 
           product_weight:
@@ -984,32 +1063,45 @@ function ProductForm({
             .filter(Boolean),
 
           featured: form.featured,
-          best_seller: form.best_seller,
+
+          best_seller:
+            form.best_seller,
+
           is_new: form.is_new,
 
           status: form.status,
-          stock_status: form.stock_status,
+
+          stock_status:
+            form.stock_status,
 
           seo_title:
             form.seo_title.trim() || null,
 
           seo_description:
-            form.seo_description.trim() || null,
+            form.seo_description.trim() ||
+            null,
 
           collectionIds:
             form.collectionIds,
 
-          images: form.images.map((image, index) => ({
-            id: image.id,
-            url: image.url,
-            storage_path: image.path || null,
-            alt: image.name || null,
-            sort_order: index,
-          })),
+          images: form.images.map(
+            (image, index) => ({
+              id: image.id,
+              url: image.url,
+              storage_path:
+                image.path || null,
+              alt: image.name || null,
+              sort_order: index,
+            }),
+          ),
         },
       });
 
-      toast.success(productId ? "Product updated successfully" : "Product created successfully");
+      toast.success(
+        productId
+          ? "Product updated successfully"
+          : "Product created successfully",
+      );
 
       await onSaved();
     } catch (err) {
@@ -1025,15 +1117,20 @@ function ProductForm({
 
   function toggleCollection(id: string) {
     setForm((current) => {
-      const exists = current.collectionIds.includes(id);
+      const exists =
+        current.collectionIds.includes(id);
 
       return {
         ...current,
+
         collectionIds: exists
           ? current.collectionIds.filter(
               (x) => x !== id,
             )
-          : [...current.collectionIds, id],
+          : [
+              ...current.collectionIds,
+              id,
+            ],
       };
     });
   }
@@ -1043,7 +1140,10 @@ function ProductForm({
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
         <Card className="w-full max-w-md p-8 text-center">
           <Spinner />
-          <p className="mt-4 text-sm text-muted-foreground">Loading product...</p>
+
+          <p className="mt-4 text-sm text-muted-foreground">
+            Loading product...
+          </p>
         </Card>
       </div>
     );
@@ -1053,12 +1153,23 @@ function ProductForm({
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
         <Card className="w-full max-w-md p-8">
-          <p className="font-medium text-destructive">Unable to load product</p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {productError instanceof Error ? productError.message : "Something went wrong."}
+          <p className="font-medium text-destructive">
+            Unable to load product
           </p>
+
+          <p className="mt-2 text-sm text-muted-foreground">
+            {productError instanceof Error
+              ? productError.message
+              : "Something went wrong."}
+          </p>
+
           <div className="mt-5 flex justify-end">
-            <Button variant="outline" onClick={onClose}>Close</Button>
+            <Button
+              variant="outline"
+              onClick={onClose}
+            >
+              Close
+            </Button>
           </div>
         </Card>
       </div>
@@ -1072,7 +1183,9 @@ function ProductForm({
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background px-6 py-4">
           <div>
             <h2 className="font-display text-xl font-semibold">
-              {productId ? "Edit Product" : "Add New Product"}
+              {productId
+                ? "Edit Product"
+                : "Add New Product"}
             </h2>
 
             <p className="mt-1 text-sm text-muted-foreground">
@@ -1093,31 +1206,54 @@ function ProductForm({
         </div>
 
         <div className="space-y-8 p-6">
+          {/* Lookup Error */}
           {lookupError && (
             <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-              <p className="text-sm font-medium text-destructive">Unable to load categories</p>
-              <p className="mt-1 text-xs text-muted-foreground">{lookupError}</p>
-              <Button type="button" variant="outline" size="sm" className="mt-3" onClick={onRetryLookups}>
+              <p className="text-sm font-medium text-destructive">
+                Unable to load categories
+              </p>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                {lookupError}
+              </p>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={onRetryLookups}
+              >
                 Try Again
               </Button>
             </div>
           )}
 
-          {!lookupError && categories.length === 0 && (
-            <div className="rounded-lg border border-amber-300/50 bg-amber-50 p-4">
-              <p className="text-sm font-medium">No categories available</p>
-              <p className="mt-1 text-xs text-muted-foreground">Run the category seed SQL in Supabase, then click Try Again.</p>
-            </div>
-          )}
+          {!lookupError &&
+            categories.length === 0 && (
+              <div className="rounded-lg border border-amber-300/50 bg-amber-50 p-4">
+                <p className="text-sm font-medium">
+                  No categories available
+                </p>
 
-          {/* Basic Information */}
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Run the category seed SQL in
+                  Supabase, then click Try Again.
+                </p>
+              </div>
+            )}
+
+          {/* =====================================================
+              BASIC INFORMATION
+          ===================================================== */}
           <FormSection title="Basic Information">
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Product Name *">
                 <Input
                   value={form.name}
                   onChange={(e) => {
-                    const value = e.target.value;
+                    const value =
+                      e.target.value;
 
                     update("name", value);
 
@@ -1136,7 +1272,10 @@ function ProductForm({
                 <Input
                   value={form.sku}
                   onChange={(e) =>
-                    update("sku", e.target.value)
+                    update(
+                      "sku",
+                      e.target.value,
+                    )
                   }
                   placeholder="SRSJ-RING-001"
                 />
@@ -1148,7 +1287,9 @@ function ProductForm({
                   onChange={(e) =>
                     update(
                       "slug",
-                      makeSlug(e.target.value),
+                      makeSlug(
+                        e.target.value,
+                      ),
                     )
                   }
                   placeholder="diamond-solitaire-ring"
@@ -1170,14 +1311,16 @@ function ProductForm({
                     Select category
                   </option>
 
-                  {categories.map((category) => (
-                    <option
-                      key={category.id}
-                      value={category.id}
-                    >
-                      {category.name}
-                    </option>
-                  ))}
+                  {categories.map(
+                    (category) => (
+                      <option
+                        key={category.id}
+                        value={category.id}
+                      >
+                        {category.name}
+                      </option>
+                    ),
+                  )}
                 </select>
               </Field>
             </div>
@@ -1198,7 +1341,9 @@ function ProductForm({
             </Field>
           </FormSection>
 
-          {/* Product Images */}
+          {/* =====================================================
+              PRODUCT IMAGES
+          ===================================================== */}
           <FormSection
             title="Product Images"
             description="Upload 2–10 high-quality product photos. The first image will be used as the main product image."
@@ -1209,8 +1354,10 @@ function ProductForm({
                   <p className="text-sm font-medium">
                     Jewellery Photos
                   </p>
+
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Recommended: front, side, 45° and top views.
+                    Recommended: front, side, 45° and
+                    top views.
                   </p>
                 </div>
 
@@ -1222,13 +1369,17 @@ function ProductForm({
                   onUploaded={(files) => {
                     setForm((current) => ({
                       ...current,
+
                       images: [
                         ...current.images,
-                        ...files.map((file) => ({
-                          url: file.url,
-                          path: file.path,
-                          name: file.name,
-                        })),
+
+                        ...files.map(
+                          (file) => ({
+                            url: file.url,
+                            path: file.path,
+                            name: file.name,
+                          }),
+                        ),
                       ].slice(0, 10),
                     }));
                   }}
@@ -1242,68 +1393,83 @@ function ProductForm({
                   </p>
 
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Upload product photos to display them on the product page.
+                    Upload product photos to display
+                    them on the product page.
                   </p>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-5">
-                  {form.images.map((image, index) => (
-                    <div
-                      key={`${image.path}-${index}`}
-                      className="group relative overflow-hidden rounded-lg border border-border bg-muted"
-                    >
-                      <div className="aspect-square">
-                        <img
-                          src={image.url}
-                          alt={image.name}
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-
-                      {index === 0 && (
-                        <span className="absolute left-2 top-2 rounded-full bg-background/90 px-2 py-1 text-[10px] font-medium">
-                          Main
-                        </span>
-                      )}
-
-                      <button
-                        type="button"
-                        disabled={saving}
-                        onClick={() => {
-                          setForm((current) => ({
-                            ...current,
-                            images: current.images.filter(
-                              (_, imageIndex) => imageIndex !== index,
-                            ),
-                          }));
-                        }}
-                        className="absolute right-2 top-2 rounded-full bg-background/90 p-1.5 text-destructive shadow-sm hover:bg-background"
-                        aria-label={`Remove ${image.name}`}
-                        title="Remove image"
+                  {form.images.map(
+                    (image, index) => (
+                      <div
+                        key={`${image.path}-${index}`}
+                        className="group relative overflow-hidden rounded-lg border border-border bg-muted"
                       >
-                        <X className="h-4 w-4" />
-                      </button>
+                        <div className="aspect-square">
+                          <img
+                            src={image.url}
+                            alt={image.name}
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
 
-                      <div className="border-t border-border bg-background/90 px-2 py-1.5">
-                        <p className="truncate text-[10px] text-muted-foreground">
-                          {index + 1}. {image.name}
-                        </p>
+                        {index === 0 && (
+                          <span className="absolute left-2 top-2 rounded-full bg-background/90 px-2 py-1 text-[10px] font-medium">
+                            Main
+                          </span>
+                        )}
+
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={() => {
+                            setForm(
+                              (current) => ({
+                                ...current,
+                                images:
+                                  current.images.filter(
+                                    (
+                                      _,
+                                      imageIndex,
+                                    ) =>
+                                      imageIndex !==
+                                      index,
+                                  ),
+                              }),
+                            );
+                          }}
+                          className="absolute right-2 top-2 rounded-full bg-background/90 p-1.5 text-destructive shadow-sm hover:bg-background"
+                          aria-label={`Remove ${image.name}`}
+                          title="Remove image"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+
+                        <div className="border-t border-border bg-background/90 px-2 py-1.5">
+                          <p className="truncate text-[10px] text-muted-foreground">
+                            {index + 1}.{" "}
+                            {image.name}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ),
+                  )}
                 </div>
               )}
 
               {form.images.length > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  {form.images.length}/10 images added. The first image is the
-                  main product image.
+                  {form.images.length}/10 images added.
+                  The first image is the main product
+                  image.
                 </p>
               )}
             </div>
           </FormSection>
 
-          {/* Pricing */}
+          {/* =====================================================
+              PRICING
+          ===================================================== */}
           <FormSection title="Pricing">
             <div className="grid gap-4 md:grid-cols-3">
               <Field label="Selling Price *">
@@ -1312,7 +1478,10 @@ function ProductForm({
                   min="0"
                   value={form.price}
                   onChange={(e) =>
-                    update("price", e.target.value)
+                    update(
+                      "price",
+                      e.target.value,
+                    )
                   }
                   placeholder="75000"
                 />
@@ -1348,24 +1517,42 @@ function ProductForm({
             </div>
           </FormSection>
 
-          {/* Jewellery */}
+          {/* =====================================================
+              JEWELLERY DETAILS
+          ===================================================== */}
           <FormSection title="Jewellery Details">
             <div className="grid gap-4 md:grid-cols-3">
               <Field label="Metal">
                 <select
                   value={form.metal}
                   onChange={(e) =>
-                    update("metal", e.target.value)
+                    update(
+                      "metal",
+                      e.target.value,
+                    )
                   }
                   className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
                 >
-                  <option value="">Select metal</option>
-                  <option value="Gold">Gold</option>
-                  <option value="Silver">Silver</option>
-                  <option value="Platinum">Platinum</option>
+                  <option value="">
+                    Select metal
+                  </option>
+
+                  <option value="Gold">
+                    Gold
+                  </option>
+
+                  <option value="Silver">
+                    Silver
+                  </option>
+
+                  <option value="Platinum">
+                    Platinum
+                  </option>
+
                   <option value="White Gold">
                     White Gold
                   </option>
+
                   <option value="Rose Gold">
                     Rose Gold
                   </option>
@@ -1386,10 +1573,22 @@ function ProductForm({
                   <option value="">
                     Select purity
                   </option>
-                  <option value="24K">24K</option>
-                  <option value="22K">22K</option>
-                  <option value="18K">18K</option>
-                  <option value="14K">14K</option>
+
+                  <option value="24K">
+                    24K
+                  </option>
+
+                  <option value="22K">
+                    22K
+                  </option>
+
+                  <option value="18K">
+                    18K
+                  </option>
+
+                  <option value="14K">
+                    14K
+                  </option>
                 </select>
               </Field>
 
@@ -1420,11 +1619,25 @@ function ProductForm({
                   }
                   className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
                 >
-                  <option value="">Select gender</option>
-                  <option value="Women">Women</option>
-                  <option value="Men">Men</option>
-                  <option value="Kids">Kids</option>
-                  <option value="Unisex">Unisex</option>
+                  <option value="">
+                    Select gender
+                  </option>
+
+                  <option value="Women">
+                    Women
+                  </option>
+
+                  <option value="Men">
+                    Men
+                  </option>
+
+                  <option value="Kids">
+                    Kids
+                  </option>
+
+                  <option value="Unisex">
+                    Unisex
+                  </option>
                 </select>
               </Field>
 
@@ -1468,12 +1681,138 @@ function ProductForm({
               />
 
               <p className="mt-1 text-xs text-muted-foreground">
-                Separate multiple occasions with commas.
+                Separate multiple occasions with
+                commas.
               </p>
             </Field>
+
+            {/* =====================================================
+                RING SIZES
+            ===================================================== */}
+            <div className="rounded-xl border border-border bg-muted/20 p-4">
+              <div className="mb-4">
+                <p className="text-sm font-semibold">
+                  Ring Sizes
+                </p>
+
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Select all ring sizes available for
+                  this product. These sizes will appear
+                  on the customer product page.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {[
+                  "6",
+                  "7",
+                  "8",
+                  "9",
+                  "10",
+                  "11",
+                  "12",
+                  "13",
+                  "14",
+                  "15",
+                  "16",
+                  "17",
+                  "18",
+                  "19",
+                  "20",
+                  "21",
+                  "22",
+                  "23",
+                  "24",
+                  "25",
+                  "26",
+                  "27",
+                  "28",
+                  "29",
+                  "30",
+                ].map((size) => {
+                  const selected =
+                    form.ring_sizes.includes(
+                      size,
+                    );
+
+                  return (
+                    <button
+                      key={size}
+                      type="button"
+                      disabled={saving}
+                      onClick={() => {
+                        setForm(
+                          (current) => ({
+                            ...current,
+
+                            ring_sizes:
+                              selected
+                                ? current.ring_sizes.filter(
+                                    (
+                                      value,
+                                    ) =>
+                                      value !==
+                                      size,
+                                  )
+                                : [
+                                    ...current.ring_sizes,
+                                    size,
+                                  ],
+                          }),
+                        );
+                      }}
+                      className={`min-w-12 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                        selected
+                          ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                          : "border-border bg-background hover:border-primary hover:bg-primary/5"
+                      }`}
+                      aria-pressed={selected}
+                      aria-label={`Ring size ${size}`}
+                    >
+                      {size}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {form.ring_sizes.length > 0 ? (
+                <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
+                  <p className="text-xs text-muted-foreground">
+                    Selected sizes:
+                    <span className="ml-1 font-medium text-foreground">
+                      {form.ring_sizes.join(
+                        ", ",
+                      )}
+                    </span>
+                  </p>
+
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() =>
+                      update(
+                        "ring_sizes",
+                        [],
+                      )
+                    }
+                    className="shrink-0 text-xs font-medium text-destructive hover:underline"
+                  >
+                    Clear
+                  </button>
+                </div>
+              ) : (
+                <p className="mt-4 text-xs text-muted-foreground">
+                  No ring sizes selected. Leave empty
+                  for products that do not require a
+                  size.
+                </p>
+              )}
+            </div>
           </FormSection>
 
-          {/* Diamond */}
+          {/* =====================================================
+              DIAMOND DETAILS
+          ===================================================== */}
           <FormSection
             title="Diamond Details"
             description="Leave these fields empty if the product does not contain diamonds."
@@ -1490,10 +1829,12 @@ function ProductForm({
                   }
                   className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
                 >
-                  <option value="">Select</option>
+                  <option value="">
+                    Select
+                  </option>
+
                   <option value="Natural">
                     Natural
-                  
                   </option>
                 </select>
               </Field>
@@ -1509,23 +1850,41 @@ function ProductForm({
                   }
                   className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
                 >
-                  <option value="">Select shape</option>
-                  <option value="Round">Round</option>
-                  <option value="Oval">Oval</option>
+                  <option value="">
+                    Select shape
+                  </option>
+
+                  <option value="Round">
+                    Round
+                  </option>
+
+                  <option value="Oval">
+                    Oval
+                  </option>
+
                   <option value="Princess">
                     Princess
                   </option>
+
                   <option value="Emerald">
                     Emerald
                   </option>
-                  <option value="Pear">Pear</option>
+
+                  <option value="Pear">
+                    Pear
+                  </option>
+
                   <option value="Marquise">
                     Marquise
                   </option>
+
                   <option value="Cushion">
                     Cushion
                   </option>
-                  <option value="Heart">Heart</option>
+
+                  <option value="Heart">
+                    Heart
+                  </option>
                 </select>
               </Field>
 
@@ -1569,15 +1928,41 @@ function ProductForm({
                   }
                   className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
                 >
-                  <option value="">Select clarity</option>
-                  <option value="GH">GH</option>
-                  <option value="IF">IF</option>
-                  <option value="VVS1">VVS1</option>
-                  <option value="VVS2">VVS2</option>
-                  <option value="VS1">VS1</option>
-                  <option value="VS2">VS2</option>
-                  <option value="SI1">SI1</option>
-                  <option value="SI2">SI2</option>
+                  <option value="">
+                    Select clarity
+                  </option>
+
+                  <option value="GH">
+                    GH
+                  </option>
+
+                  <option value="IF">
+                    IF
+                  </option>
+
+                  <option value="VVS1">
+                    VVS1
+                  </option>
+
+                  <option value="VVS2">
+                    VVS2
+                  </option>
+
+                  <option value="VS1">
+                    VS1
+                  </option>
+
+                  <option value="VS2">
+                    VS2
+                  </option>
+
+                  <option value="SI1">
+                    SI1
+                  </option>
+
+                  <option value="SI2">
+                    SI2
+                  </option>
                 </select>
               </Field>
 
@@ -1585,19 +1970,32 @@ function ProductForm({
                 <select
                   value={form.cut}
                   onChange={(e) =>
-                    update("cut", e.target.value)
+                    update(
+                      "cut",
+                      e.target.value,
+                    )
                   }
                   className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
                 >
-                  <option value="">Select cut</option>
+                  <option value="">
+                    Select cut
+                  </option>
+
                   <option value="Excellent">
                     Excellent
                   </option>
+
                   <option value="Very Good">
                     Very Good
                   </option>
-                  <option value="Good">Good</option>
-                  <option value="Fair">Fair</option>
+
+                  <option value="Good">
+                    Good
+                  </option>
+
+                  <option value="Fair">
+                    Fair
+                  </option>
                 </select>
               </Field>
 
@@ -1647,13 +2045,18 @@ function ProductForm({
             </div>
           </FormSection>
 
-          {/* Tags */}
+          {/* =====================================================
+              TAGS
+          ===================================================== */}
           <FormSection title="Tags">
             <Field label="Product Tags">
               <Input
                 value={form.tags}
                 onChange={(e) =>
-                  update("tags", e.target.value)
+                  update(
+                    "tags",
+                    e.target.value,
+                  )
                 }
                 placeholder="diamond, ring, bridal, bestseller"
               />
@@ -1664,7 +2067,9 @@ function ProductForm({
             </Field>
           </FormSection>
 
-          {/* Collections */}
+          {/* =====================================================
+              COLLECTIONS
+          ===================================================== */}
           <FormSection title="Collections">
             {collections.length === 0 ? (
               <p className="text-sm text-muted-foreground">
@@ -1672,36 +2077,40 @@ function ProductForm({
               </p>
             ) : (
               <div className="grid gap-2 md:grid-cols-3">
-                {collections.map((collection) => {
-                  const selected =
-                    form.collectionIds.includes(
-                      collection.id,
-                    );
+                {collections.map(
+                  (collection) => {
+                    const selected =
+                      form.collectionIds.includes(
+                        collection.id,
+                      );
 
-                  return (
-                    <button
-                      key={collection.id}
-                      type="button"
-                      onClick={() =>
-                        toggleCollection(
-                          collection.id,
-                        )
-                      }
-                      className={`rounded-md border px-3 py-2 text-left text-sm transition ${
-                        selected
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border hover:bg-muted"
-                      }`}
-                    >
-                      {collection.name}
-                    </button>
-                  );
-                })}
+                    return (
+                      <button
+                        key={collection.id}
+                        type="button"
+                        onClick={() =>
+                          toggleCollection(
+                            collection.id,
+                          )
+                        }
+                        className={`rounded-md border px-3 py-2 text-left text-sm transition ${
+                          selected
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border hover:bg-muted"
+                        }`}
+                      >
+                        {collection.name}
+                      </button>
+                    );
+                  },
+                )}
               </div>
             )}
           </FormSection>
 
-          {/* Status */}
+          {/* =====================================================
+              STATUS
+          ===================================================== */}
           <FormSection title="Status & Visibility">
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Product Status">
@@ -1715,11 +2124,17 @@ function ProductForm({
                   }
                   className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
                 >
-                  <option value="draft">Draft</option>
+                  <option value="draft">
+                    Draft
+                  </option>
+
                   <option value="published">
                     Published
                   </option>
-                  <option value="hidden">Hidden</option>
+
+                  <option value="hidden">
+                    Hidden
+                  </option>
                 </select>
               </Field>
 
@@ -1737,6 +2152,7 @@ function ProductForm({
                   <option value="in_stock">
                     In Stock
                   </option>
+
                   <option value="out_of_stock">
                     Out of Stock
                   </option>
@@ -1748,7 +2164,10 @@ function ProductForm({
               <Checkbox
                 checked={form.featured}
                 onChange={(value) =>
-                  update("featured", value)
+                  update(
+                    "featured",
+                    value,
+                  )
                 }
                 label="Featured"
               />
@@ -1756,7 +2175,10 @@ function ProductForm({
               <Checkbox
                 checked={form.best_seller}
                 onChange={(value) =>
-                  update("best_seller", value)
+                  update(
+                    "best_seller",
+                    value,
+                  )
                 }
                 label="Bestseller"
               />
@@ -1764,14 +2186,19 @@ function ProductForm({
               <Checkbox
                 checked={form.is_new}
                 onChange={(value) =>
-                  update("is_new", value)
+                  update(
+                    "is_new",
+                    value,
+                  )
                 }
                 label="New Arrival"
               />
             </div>
           </FormSection>
 
-          {/* SEO */}
+          {/* =====================================================
+              SEO
+          ===================================================== */}
           <FormSection title="SEO">
             <div className="space-y-4">
               <Field label="SEO Title">
@@ -1824,7 +2251,10 @@ function ProductForm({
             ) : (
               <>
                 <Save className="mr-2 h-4 w-4" />
-                {productId ? "Update Product" : "Save Product"}
+
+                {productId
+                  ? "Update Product"
+                  : "Save Product"}
               </>
             )}
           </Button>
