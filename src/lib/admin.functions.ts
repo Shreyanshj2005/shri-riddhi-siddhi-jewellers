@@ -1,270 +1,68 @@
 import { createServerFn } from "@tanstack/react-start";
 import { queryOptions } from "@tanstack/react-query";
-
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { supabase } from "@/integrations/supabase/client";
-
-import type {
-  Category,
-  Collection,
-  Enquiry,
-  Media,
-  Offer,
-  ProductFull,
-  Rate,
-  Review,
-  Setting,
-  HomepageSection,
-} from "./types";
-
+import type { Category, Collection, Enquiry, Media, Offer, ProductFull, Rate, Review, Setting, HomepageSection } from "./types";
 import type { Json } from "@/integrations/supabase/types";
 
-import Razorpay from "razorpay";
-import { createClient } from "@supabase/supabase-js";
+/* ------------ auth helpers ------------ */
 
-/* =========================================================
-   AUTH HELPERS
-========================================================= */
-
-async function assertAdmin(context: {
-  supabase: {
-    rpc: (
-      fn: "is_admin",
-    ) => PromiseLike<{ data: unknown }>;
-  };
-  userId: string;
-}) {
+async function assertAdmin(context: { supabase: { rpc: (fn: "is_admin") => PromiseLike<{ data: unknown }> }; userId: string }) {
   const { data } = await context.supabase.rpc("is_admin");
-
-  if (data !== true) {
-    throw new Error("Forbidden: admin access required");
-  }
-
+  if (data !== true) throw new Error("Forbidden: admin access required");
   return context.userId;
 }
 
-async function logAudit(
-  context: {
-    supabase: {
-      from: (table: "audit_logs") => any;
-    };
-  },
-  action: string,
-  entity: string,
-  entityId?: string | null,
-  details: Record<string, unknown> = {},
-) {
-  await context.supabase.from("audit_logs").insert({
-    action,
-    entity,
-    entity_id: entityId ?? null,
-    details: details as Json,
-  });
+async function logAudit(context: { supabase: ReturnType<typeof adminCtx> }, action: string, entity: string, entityId?: string | null, details: Record<string, unknown> = {}) {
+  await context.supabase.from("audit_logs").insert({ action, entity, entity_id: entityId ?? null, details: details as Json });
 }
-
 type AdminSb = Parameters<typeof logAudit>[0]["supabase"];
-
-/* =========================================================
-   ADMIN AUTH
-========================================================= */
+declare function adminCtx(): never;
 
 export const claimAdmin = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } =
-      await context.supabase.rpc("claim_admin");
-
-    if (error) {
-      return { isAdmin: false };
-    }
-
-    return {
-      isAdmin: data === true,
-    };
+    const { data, error } = await context.supabase.rpc("claim_admin");
+    if (error) return { isAdmin: false };
+    return { isAdmin: data === true };
   });
 
 export const checkAdmin = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data } =
-      await context.supabase.rpc("is_admin");
-
-    return {
-      isAdmin: data === true,
-      userId: context.userId,
-    };
+    const { data } = await context.supabase.rpc("is_admin");
+    return { isAdmin: data === true, userId: context.userId };
   });
 
-/* =========================================================
-   DASHBOARD
-========================================================= */
+/* ------------ dashboard ------------ */
 
-export const getAdminDashboard = createServerFn({
-  method: "GET",
-})
+export const getAdminDashboard = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertAdmin(context);
-
     const sb = context.supabase;
-
-    const count = async (
-      build: () => PromiseLike<{
-        count: number | null;
-      }>,
-    ) => {
-      return (await build()).count ?? 0;
-    };
-
-    const [
-      published,
-      drafts,
-      hidden,
-      outOfStock,
-      trashed,
-      enquiries,
-      newEnquiries,
-      reviews,
-      media,
-    ] = await Promise.all([
-      count(() =>
-        sb
-          .from("products")
-          .select("id", {
-            count: "exact",
-            head: true,
-          })
-          .eq("status", "published")
-          .is("deleted_at", null),
-      ),
-
-      count(() =>
-        sb
-          .from("products")
-          .select("id", {
-            count: "exact",
-            head: true,
-          })
-          .eq("status", "draft")
-          .is("deleted_at", null),
-      ),
-
-      count(() =>
-        sb
-          .from("products")
-          .select("id", {
-            count: "exact",
-            head: true,
-          })
-          .eq("status", "hidden")
-          .is("deleted_at", null),
-      ),
-
-      count(() =>
-        sb
-          .from("products")
-          .select("id", {
-            count: "exact",
-            head: true,
-          })
-          .eq("stock_status", "out_of_stock")
-          .is("deleted_at", null),
-      ),
-
-      count(() =>
-        sb
-          .from("products")
-          .select("id", {
-            count: "exact",
-            head: true,
-          })
-          .not("deleted_at", "is", null),
-      ),
-
-      count(() =>
-        sb.from("enquiries").select("id", {
-          count: "exact",
-          head: true,
-        }),
-      ),
-
-      count(() =>
-        sb
-          .from("enquiries")
-          .select("id", {
-            count: "exact",
-            head: true,
-          })
-          .eq("status", "new"),
-      ),
-
-      count(() =>
-        sb.from("reviews").select("id", {
-          count: "exact",
-          head: true,
-        }),
-      ),
-
-      count(() =>
-        sb.from("media").select("id", {
-          count: "exact",
-          head: true,
-        }),
-      ),
+    const count = async (build: () => PromiseLike<{ count: number | null }>) => (await build()).count ?? 0;
+    const [published, drafts, hidden, outOfStock, trashed, enquiries, newEnquiries, reviews, media] = await Promise.all([
+      count(() => sb.from("products").select("id", { count: "exact", head: true }).eq("status", "published").is("deleted_at", null)),
+      count(() => sb.from("products").select("id", { count: "exact", head: true }).eq("status", "draft").is("deleted_at", null)),
+      count(() => sb.from("products").select("id", { count: "exact", head: true }).eq("status", "hidden").is("deleted_at", null)),
+      count(() => sb.from("products").select("id", { count: "exact", head: true }).eq("stock_status", "out_of_stock").is("deleted_at", null)),
+      count(() => sb.from("products").select("id", { count: "exact", head: true }).not("deleted_at", "is", null)),
+      count(() => sb.from("enquiries").select("id", { count: "exact", head: true })),
+      count(() => sb.from("enquiries").select("id", { count: "exact", head: true }).eq("status", "new")),
+      count(() => sb.from("reviews").select("id", { count: "exact", head: true })),
+      count(() => sb.from("media").select("id", { count: "exact", head: true })),
     ]);
-
-    const [
-      { data: recentEnquiries },
-      { data: recentProducts },
-      { data: audit },
-      { data: rates },
-    ] = await Promise.all([
-      sb
-        .from("enquiries")
-        .select("*")
-        .order("created_at", {
-          ascending: false,
-        })
-        .limit(6),
-
-      sb
-        .from("products")
-        .select(
-          "id,name,slug,price,status,updated_at,images:product_images(url,sort_order)",
-        )
-        .is("deleted_at", null)
-        .order("updated_at", {
-          ascending: false,
-        })
-        .limit(6),
-
-      sb
-        .from("audit_logs")
-        .select("*")
-        .order("created_at", {
-          ascending: false,
-        })
-        .limit(10),
-
-      sb
-        .from("rates")
-        .select("*")
-        .order("sort_order"),
+    const [{ data: recentEnquiries }, { data: recentProducts }, { data: audit }, { data: rates }] = await Promise.all([
+      sb.from("enquiries").select("*").order("created_at", { ascending: false }).limit(6),
+      sb.from("products").select(
+  "id,name,slug,sku,price,original_price,status,stock_status,featured,best_seller,is_new,updated_at,deleted_at,images:product_images(url,sort_order)",
+  { count: "exact" }
+),
+      sb.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(10),
+      sb.from("rates").select("*").order("sort_order"),
     ]);
-
     return {
-      stats: {
-        published,
-        drafts,
-        hidden,
-        outOfStock,
-        trashed,
-        enquiries,
-        newEnquiries,
-        reviews,
-        media,
-      },
-
+      stats: { published, drafts, hidden, outOfStock, trashed, enquiries, newEnquiries, reviews, media },
       recentEnquiries: recentEnquiries ?? [],
       recentProducts: recentProducts ?? [],
       audit: audit ?? [],
@@ -272,13 +70,9 @@ export const getAdminDashboard = createServerFn({
     };
   });
 
-/* =========================================================
-   PRODUCTS
-========================================================= */
+/* ------------ products ------------ */
 
-export const adminListProducts = createServerFn({
-  method: "POST",
-})
+export const adminListProducts = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
     (i: {
@@ -287,7 +81,7 @@ export const adminListProducts = createServerFn({
       category?: string;
       trash?: boolean;
       page?: number;
-    }) => i ?? {},
+    }) => i ?? {}
   )
   .handler(async ({ context, data }) => {
     await assertAdmin(context);
@@ -305,3765 +99,1174 @@ export const adminListProducts = createServerFn({
           sku,
           price,
           original_price,
-          offer_label,
           status,
           stock_status,
           featured,
           best_seller,
           is_new,
           updated_at,
-          deleted_at,
-          category:categories!products_category_id_fkey(name),
-          images:product_images(url,sort_order)
+          deleted_at
         `,
-        {
-          count: "exact",
-        },
+        { count: "exact" }
       )
-      .order("updated_at", {
-        ascending: false,
-      })
-      .range(
-        (page - 1) * size,
-        page * size - 1,
-      );
+      .order("updated_at", { ascending: false })
+      .range((page - 1) * size, page * size - 1);
 
-    q = data.trash
-      ? q.not("deleted_at", "is", null)
-      : q.is("deleted_at", null);
-
-    if (data.q) {
-      q = q.ilike(
-        "search_text",
-        `%${data.q.toLowerCase()}%`,
+    if (data.q?.trim()) {
+      const search = data.q.trim();
+      q = q.or(
+        `name.ilike.%${search}%,sku.ilike.%${search}%,slug.ilike.%${search}%`
       );
     }
 
-    if (data.status) {
+    if (data.status && data.status !== "all") {
       q = q.eq("status", data.status);
     }
 
-    if (data.category) {
-      q = q.eq("category_id", data.category);
+    if (data.trash) {
+      q = q.not("deleted_at", "is", null);
+    } else {
+      q = q.is("deleted_at", null);
     }
 
-    const {
-      data: rows,
-      count,
-      error,
-    } = await q;
+    const { data: rows, count, error } = await q;
 
     if (error) {
+      console.error("[adminListProducts] Supabase error:", error);
+      throw new Error(`Unable to load products: ${error.message}`);
+    }
+
+    const products = rows ?? [];
+
+    // Fetch product images
+    if (products.length === 0) {
+      return {
+        items: [],
+        total: count ?? 0,
+        page,
+        pageSize: size,
+      };
+    }
+
+    const productIds = products.map((product) => product.id);
+
+    const {
+      data: images,
+      error: imagesError,
+    } = await context.supabase
+      .from("product_images")
+      .select("*")
+      .in("product_id", productIds)
+      .order("sort_order", { ascending: true });
+
+    if (imagesError) {
+      console.error(
+        "[adminListProducts] product_images error:",
+        imagesError
+      );
+
       throw new Error(
-        `Unable to load products: ${error.message}`,
+        `Unable to load product images: ${imagesError.message}`
       );
     }
 
+    // Attach images to their respective products
+    const imagesByProduct = new Map<string, typeof images>();
+
+    for (const image of images ?? []) {
+      const existing = imagesByProduct.get(image.product_id) ?? [];
+      existing.push(image);
+      imagesByProduct.set(image.product_id, existing);
+    }
+
+    const items = products.map((product) => ({
+      ...product,
+      images: imagesByProduct.get(product.id) ?? [],
+    }));
+
     return {
-      items: rows ?? [],
+      items,
       total: count ?? 0,
       page,
       pageSize: size,
     };
   });
-
-export const adminGetProduct = createServerFn({
-  method: "POST",
-})
+export const adminGetProduct = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i: { id: string }) => i)
   .handler(async ({ context, data }) => {
     await assertAdmin(context);
-
-    const { data: row } =
-      await context.supabase
-        .from("products")
-        .select(
-          `
-            *,
-            images:product_images(*),
-            category:categories!products_category_id_fkey(id,name,slug),
-            subcategory:categories!products_subcategory_id_fkey(id,name,slug),
-            product_collections(collection_id)
-          `,
-        )
-        .eq("id", data.id)
-        .maybeSingle();
-
-    if (!row) {
-      throw new Error("Product not found");
-    }
-
-    const r =
-      row as unknown as ProductFull & {
-        images: {
-          sort_order: number;
-        }[];
-
-        product_collections: {
-          collection_id: string;
-        }[];
-      };
-
-    r.images.sort(
-      (a, b) =>
-        a.sort_order - b.sort_order,
-    );
-
-    return {
-      product: r,
-      collectionIds:
-        r.product_collections.map(
-          (p) => p.collection_id,
-        ),
-    };
+    const { data: row } = await context.supabase
+      .from("products")
+      .select("*,images:product_images(*),category:categories!products_category_id_fkey(id,name,slug),subcategory:categories!products_subcategory_id_fkey(id,name,slug),product_collections(collection_id)")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (!row) throw new Error("Product not found");
+    const r = row as unknown as ProductFull & { images: { sort_order: number }[]; product_collections: { collection_id: string }[] };
+    r.images.sort((a, b) => a.sort_order - b.sort_order);
+    return { product: r, collectionIds: r.product_collections.map((p) => p.collection_id) };
   });
-
-/* =========================================================
-   PRODUCT PAYLOAD
-========================================================= */
 
 export interface ProductPayload {
   id?: string;
-
-  name: string;
-  slug: string;
-  sku?: string | null;
-
-  category_id?: string | null;
-  subcategory_id?: string | null;
-
-  price: number;
-  original_price?: number | null;
-  offer_label?: string | null;
-
-  metal?: string | null;
-  purity?: string | null;
-  gender?: string | null;
-  stone?: string | null;
-
-  /*
-   * RING SIZES
-   *
-   * Example:
-   * ["8", "9", "10", "11", "12"]
-   *
-   * NULL / empty array can be used for
-   * non-ring products.
-   */
-  ring_sizes?: string[] | null;
-
-  occasions: string[];
-  style?: string | null;
-
-  diamond_type?: string | null;
-  diamond_shape?: string | null;
-  diamond_carat?: number | null;
-  diamond_colour?: string | null;
-  diamond_clarity?: string | null;
-  cut?: string | null;
-  certification?: string | null;
-  num_stones?: string | null;
-  total_diamond_weight?: number | null;
-
+  name: string; slug: string; sku?: string | null;
+  category_id?: string | null; subcategory_id?: string | null;
+  price: number; original_price?: number | null; offer_label?: string | null;
+  metal?: string | null; purity?: string | null; gender?: string | null; stone?: string | null;
+  occasions: string[]; style?: string | null;
+  diamond_type?: string | null; diamond_shape?: string | null; diamond_carat?: number | null;
+  diamond_colour?: string | null; diamond_clarity?: string | null; cut?: string | null;
+  certification?: string | null; num_stones?: string | null; total_diamond_weight?: number | null;
   product_weight?: number | null;
-
-  description?: string | null;
-  tags: string[];
-
-  featured: boolean;
-  best_seller: boolean;
-  is_new: boolean;
-
-  status: string;
-  stock_status: string;
-
-  seo_title?: string | null;
-  seo_description?: string | null;
-
+  description?: string | null; tags: string[];
+  featured: boolean; best_seller: boolean; is_new: boolean;
+  status: string; stock_status: string;
+  seo_title?: string | null; seo_description?: string | null;
   collectionIds: string[];
-
-  images: {
-    id?: string;
-    url: string;
-    storage_path?: string | null;
-    alt?: string | null;
-  }[];
+  images: { id?: string; url: string; storage_path?: string | null; alt?: string | null }[];
 }
 
-/* =========================================================
-   SAVE PRODUCT
-========================================================= */
-
-export const adminSaveProduct = createServerFn({
-  method: "POST",
-})
+export const adminSaveProduct = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i: ProductPayload) => {
-    if (!i.name?.trim()) {
-      throw new Error(
-        "Product name is required",
-      );
-    }
-
-    if (!i.slug?.trim()) {
-      throw new Error(
-        "Product link is required",
-      );
-    }
-
-    if (i.price == null || i.price < 0) {
-      throw new Error("Price is required");
-    }
-
-    /*
-     * Normalize ring sizes.
-     *
-     * This makes sure:
-     * - numbers become strings
-     * - blank values are removed
-     * - duplicate sizes are removed
-     */
-    if (Array.isArray(i.ring_sizes)) {
-      i.ring_sizes = Array.from(
-        new Set(
-          i.ring_sizes
-            .map((size) =>
-              String(size).trim(),
-            )
-            .filter(Boolean),
-        ),
-      );
-    } else {
-      i.ring_sizes = null;
-    }
-
+    if (!i.name?.trim()) throw new Error("Product name is required");
+    if (!i.slug?.trim()) throw new Error("Product link is required");
+    if (i.price == null || i.price < 0) throw new Error("Price is required");
     return i;
   })
   .handler(async ({ context, data }) => {
     await assertAdmin(context);
-
     const sb = context.supabase;
-
-    const {
-      id,
-      collectionIds,
-      images,
-      ...fields
-    } = data;
+    const { id, collectionIds, images, ...fields } = data;
 
     let productId = id;
+    if (id) {
+      const { data: before } = await sb.from("products").select("price,status").eq("id", id).maybeSingle();
+      const { error } = await sb.from("products").update(fields).eq("id", id);
+      if (error) throw new Error(error.message);
+      if (before && Number(before.price) !== Number(fields.price)) {
+        await logAudit({ supabase: sb as unknown as AdminSb }, "price_change", "product", id, { from: before.price, to: fields.price });
+      }
+      if (before && before.status !== fields.status) {
+        await logAudit({ supabase: sb as unknown as AdminSb }, "status_change", "product", id, { from: before.status, to: fields.status });
+      }
+    } else {
+      const { data: created, error } = await sb.from("products").insert(fields).select("id").single();
+      if (error) throw new Error(error.message);
+      productId = created.id;
+      await logAudit({ supabase: sb as unknown as AdminSb }, "create", "product", productId, { name: fields.name });
+    }
 
-    /* -----------------------------------------
-       SLUG CHECK
-    ----------------------------------------- */
+    // images: replace set, preserving order
+    const { data: existing } = await sb.from("product_images").select("id,storage_path").eq("product_id", productId!);
+    const keepIds = new Set(images.filter((i) => i.id).map((i) => i.id!));
+    const removed = (existing ?? []).filter((e) => !keepIds.has(e.id));
+    if (removed.length) {
+      await sb.from("product_images").delete().in("id", removed.map((r) => r.id));
+      const paths = removed.map((r) => r.storage_path).filter((p): p is string => !!p);
+      if (paths.length) await sb.storage.from("media").remove(paths);
+      await logAudit({ supabase: sb as unknown as AdminSb }, "image_delete", "product", productId, { count: removed.length });
+    }
+    for (const [i, img] of images.entries()) {
+      if (img.id) await sb.from("product_images").update({ sort_order: i, alt: img.alt ?? null }).eq("id", img.id);
+      else await sb.from("product_images").insert({ product_id: productId!, url: img.url, storage_path: img.storage_path ?? null, alt: img.alt ?? null, sort_order: i });
+    }
 
-    const normalizedSlug = String(
-      fields.slug ?? "",
-    )
-      .trim()
-      .toLowerCase();
+    await sb.from("product_collections").delete().eq("product_id", productId!);
+    if (collectionIds.length) {
+      await sb.from("product_collections").insert(collectionIds.map((cid, i) => ({ product_id: productId!, collection_id: cid, sort_order: i })));
+    }
+    return { id: productId!, slug: fields.slug };
+  });
 
-    const normalizedSku =
-      fields.sku == null
-        ? ""
-        : String(fields.sku).trim();
+export const adminProductAction = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: { id: string; action: "trash" | "restore" | "delete_forever" | "duplicate" | "publish" | "hide" | "draft" | "out_of_stock" | "in_stock" | "toggle_featured" | "toggle_best" | "toggle_new" }) => i)
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context);
+    const sb = context.supabase;
+    const { id, action } = data;
+    switch (action) {
+      case "trash":
+        await sb.from("products").update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        await logAudit({ supabase: sb as unknown as AdminSb }, "trash", "product", id);
+        break;
+      case "restore":
+        await sb.from("products").update({ deleted_at: null }).eq("id", id);
+        break;
+      case "delete_forever": {
+        const { data: imgs } = await sb.from("product_images").select("storage_path").eq("product_id", id);
+        const paths = (imgs ?? []).map((i) => i.storage_path).filter((p): p is string => !!p);
+        if (paths.length) await sb.storage.from("media").remove(paths);
+        await sb.from("products").delete().eq("id", id);
+        await logAudit({ supabase: sb as unknown as AdminSb }, "delete_forever", "product", id);
+        break;
+      }
+      case "duplicate": {
+        const { data: p } = await sb.from("products").select("*").eq("id", id).single();
+        const { data: imgs } = await sb.from("product_images").select("url,storage_path,alt,sort_order").eq("product_id", id);
+        const { data: cols } = await sb.from("product_collections").select("collection_id").eq("product_id", id);
+        const { id: _oldId, created_at: _c, updated_at: _u, discount_pct: _d, search_text: _s, ...rest } = p as Record<string, unknown> & { id: string };
+        const suffix = Date.now().toString(36).slice(-4);
+        const { data: created, error } = await sb.from("products").insert({ ...(rest as never), name: `${p!.name} (Copy)`, slug: `${p!.slug}-copy-${suffix}`, sku: p!.sku ? `${p!.sku}-C${suffix}` : null, status: "draft" }).select("id").single();
+        if (error) throw new Error(error.message);
+        if (imgs?.length) await sb.from("product_images").insert(imgs.map((i) => ({ ...i, product_id: created.id })));
+        if (cols?.length) await sb.from("product_collections").insert(cols.map((c) => ({ product_id: created.id, collection_id: c.collection_id })));
+        return { id: created.id };
+      }
+      case "publish": case "hide": case "draft":
+        await sb.from("products").update({ status: action === "publish" ? "published" : action }).eq("id", id);
+        await logAudit({ supabase: sb as unknown as AdminSb }, "status_change", "product", id, { to: action });
+        break;
+      case "out_of_stock": case "in_stock":
+        await sb.from("products").update({ stock_status: action }).eq("id", id);
+        break;
+      default: {
+        const col = action === "toggle_featured" ? "featured" : action === "toggle_best" ? "best_seller" : "is_new";
+        const { data: p } = await sb.from("products").select(col).eq("id", id).single();
+        await sb.from("products").update({ [col]: !(p as Record<string, boolean>)[col] }).eq("id", id);
+      }
+    }
+    return { ok: true };
+  });
+
+/* ------------ media upload ------------ */
+
+export const adminUploadMedia = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: { fileName: string; contentType: string; base64: string; kind?: string }) => {
+    if (!i.base64) throw new Error("No file data");
+    return i;
+  })
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context);
+    const sb = context.supabase;
+    const bytes = Uint8Array.from(atob(data.base64), (c) => c.charCodeAt(0));
+    if (bytes.byteLength > 8 * 1024 * 1024) throw new Error("Optimized file is larger than 8 MB. Please upload a smaller image/video.");
+    const safe = data.fileName.replace(/[^\w.-]/g, "_").slice(-80);
+    const path = `${data.kind ?? "product"}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`;
+    const { error } = await sb.storage.from("media").upload(path, bytes, {
+      contentType: data.contentType,
+      cacheControl: "31536000",
+      upsert: false,
+    });
+    if (error) throw new Error(error.message);
+    const url = `/api/public/media/${path}`;
+    await sb.from("media").insert({ path, url, file_name: safe, mime_type: data.contentType, size_bytes: bytes.byteLength, kind: data.kind ?? "product", created_by: context.userId });
+    return { url, path };
+  });
+
+export const adminListMedia = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: { kind?: string }) => i ?? {})
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context);
+    let q = context.supabase.from("media").select("*").order("created_at", { ascending: false }).limit(300);
+    if (data.kind) q = q.eq("kind", data.kind);
+    const { data: rows } = await q;
+    const media = (rows ?? []) as Media[];
+    const { data: usedImgs } = await context.supabase.from("product_images").select("storage_path,product:products(name,slug)").not("storage_path", "is", null);
+    const usage = new Map<string, string>();
+    for (const u of (usedImgs ?? []) as { storage_path: string | null; product: { name: string } | null }[]) {
+      if (u.storage_path && u.product) usage.set(u.storage_path, u.product.name);
+    }
+    return media.map((m) => ({ ...m, used_by: usage.get(m.path) ?? null }));
+  });
+
+export const adminDeleteMedia = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: { id: string; path: string }) => i)
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context);
+    const sb = context.supabase;
+    await sb.storage.from("media").remove([data.path]);
+    await sb.from("product_images").delete().eq("storage_path", data.path);
+    await sb.from("media").delete().eq("id", data.id);
+    await logAudit({ supabase: sb as unknown as AdminSb }, "media_delete", "media", data.id, { path: data.path });
+    return { ok: true };
+  });
+
+/* ------------ simple CRUD collections ------------ */
+
+export const adminGetLookups = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context);
+    const sb = context.supabase;
+    const [{ data: categories }, { data: collections }] = await Promise.all([
+      sb.from("categories").select("*").order("sort_order"),
+      sb.from("collections").select("*").order("kind").order("sort_order"),
+    ]);
+    return { categories: (categories ?? []) as Category[], collections: (collections ?? []) as Collection[] };
+  });
+
+export const adminSaveCategory = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: Partial<Category> & { name: string; slug: string }) => i)
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context);
+    const { id, ...fields } = data;
+    const q = id ? context.supabase.from("categories").update(fields).eq("id", id) : context.supabase.from("categories").insert(fields as never);
+    const { error } = await q;
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const adminDeleteCategory = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: { id: string }) => i)
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context);
+    const { error } = await context.supabase.from("categories").delete().eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const adminSaveCollection = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: Partial<Collection> & { name: string; slug: string; kind: string }) => i)
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context);
+    const { id, ...fields } = data;
+    const q = id ? context.supabase.from("collections").update(fields).eq("id", id) : context.supabase.from("collections").insert(fields as never);
+    const { error } = await q;
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const adminDeleteCollection = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: { id: string }) => i)
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context);
+    const { error } = await context.supabase.from("collections").delete().eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+/* ------------ rates ------------ */
+
+export const adminGetRates = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context);
+    const { data } = await context.supabase.from("rates").select("*").order("sort_order");
+    return (data ?? []) as Rate[];
+  });
+
+export const adminSaveRate = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: { key: string; current_rate: number | null; notes?: string | null }) => i)
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context);
+    const sb = context.supabase;
+    const { error } = await sb.from("rates").update({ current_rate: data.current_rate, notes: data.notes ?? null }).eq("key", data.key);
+    if (error) throw new Error(error.message);
+    await logAudit({ supabase: sb as unknown as AdminSb }, "rate_update", "rate", data.key, { to: data.current_rate });
+    return { ok: true };
+  });
+
+/* ------------ offers / reviews / homepage / settings / enquiries ------------ */
+
+export const adminGetOffers = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context);
+    const { data } = await context.supabase.from("offers").select("*").order("sort_order");
+    return (data ?? []) as Offer[];
+  });
+
+export const adminSaveOffer = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: Partial<Offer> & { title: string }) => i)
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context);
+    const { id, ...fields } = data;
+    const { error } = id ? await context.supabase.from("offers").update(fields).eq("id", id) : await context.supabase.from("offers").insert(fields as never);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const adminDeleteOffer = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: { id: string }) => i)
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context);
+    await context.supabase.from("offers").delete().eq("id", data.id);
+    return { ok: true };
+  });
+
+export const adminGetReviews = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context);
+    const { data } = await context.supabase.from("reviews").select("*").order("sort_order");
+    return (data ?? []) as Review[];
+  });
+
+export const adminSaveReview = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: Partial<Review> & { customer_name: string; review_text: string }) => i)
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context);
+    const { id, ...fields } = data;
+    const { error } = id ? await context.supabase.from("reviews").update(fields).eq("id", id) : await context.supabase.from("reviews").insert(fields as never);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const adminDeleteReview = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: { id: string }) => i)
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context);
+    await context.supabase.from("reviews").delete().eq("id", data.id);
+    return { ok: true };
+  });
+
+export const adminGetHomepage = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context);
+    const sb = context.supabase;
+    const [{ data: sections }, { data: settings }] = await Promise.all([
+      sb.from("homepage_sections").select("*").order("sort_order"),
+      sb.from("settings").select("*"),
+    ]);
+    return { sections: (sections ?? []) as HomepageSection[], settings: (settings ?? []) as Setting[] };
+  });
+
+export const adminSaveSection = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: { key: string; title?: string; subtitle?: string | null; is_visible?: boolean; sort_order?: number }) => i)
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context);
+    const { key, ...fields } = data;
+    const { error } = await context.supabase.from("homepage_sections").update(fields).eq("key", key);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const adminSaveSetting = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: { key: string; value: Record<string, unknown> }) => i)
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context);
+    const sb = context.supabase;
+    const { error } = await sb.from("settings").upsert({ key: data.key, value: data.value as Json }, { onConflict: "key" });
+    if (error) throw new Error(error.message);
+    await logAudit({ supabase: sb as unknown as AdminSb }, "settings_update", "setting", data.key);
+    return { ok: true };
+  });
+
+
+/* ------------ customer checkout / enquiries ------------ */
+
+/**
+ * Creates a customer order in Supabase and then creates the corresponding
+ * Razorpay order. This function is intentionally available to authenticated
+ * customers, not only admins.
+ */
+export const createCustomerOrder = createServerFn({
+  method: "POST",
+})
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (i: {
+      customer_name: string;
+      customer_email?: string | null;
+      customer_phone: string;
+
+      shipping_address: string;
+      shipping_city: string;
+      shipping_state: string;
+      shipping_pincode: string;
+
+      subtotal: number;
+      shipping_charge?: number;
+      discount?: number;
+      total_amount: number;
+
+      payment_method?: string;
+
+      coupon_code?: string | null;
+      coupon_discount?: number;
+
+      items: {
+        product_id: string;
+        product_name: string;
+        product_slug?: string | null;
+        quantity: number;
+        unit_price: number;
+        total_price: number;
+        product_image?: string | null;
+        ring_size?: string | null;
+      }[];
+    }) => {
+      if (!i.customer_name?.trim()) {
+        throw new Error("Customer name is required");
+      }
+
+      if (!i.customer_phone?.trim()) {
+        throw new Error("Customer phone is required");
+      }
+
+      if (!i.shipping_address?.trim()) {
+        throw new Error("Shipping address is required");
+      }
+
+      if (!i.shipping_city?.trim()) {
+        throw new Error("Shipping city is required");
+      }
+
+      if (!i.shipping_state?.trim()) {
+        throw new Error("Shipping state is required");
+      }
+
+      if (!i.shipping_pincode?.trim()) {
+        throw new Error("Shipping pincode is required");
+      }
+
+      if (!Array.isArray(i.items) || i.items.length === 0) {
+        throw new Error("Your cart is empty");
+      }
+
+      if (
+        !Number.isFinite(Number(i.total_amount)) ||
+        Number(i.total_amount) <= 0
+      ) {
+        throw new Error("Invalid order amount");
+      }
+
+      return {
+        ...i,
+
+        customer_name: i.customer_name.trim(),
+        customer_email: i.customer_email?.trim() || null,
+        customer_phone: i.customer_phone.trim(),
+
+        shipping_address: i.shipping_address.trim(),
+        shipping_city: i.shipping_city.trim(),
+        shipping_state: i.shipping_state.trim(),
+        shipping_pincode: i.shipping_pincode.trim(),
+
+        subtotal: Number(i.subtotal) || 0,
+        shipping_charge: Number(i.shipping_charge) || 0,
+        discount: Number(i.discount) || 0,
+        total_amount: Number(i.total_amount),
+
+        coupon_discount: Number(i.coupon_discount) || 0,
+
+        payment_method: i.payment_method || "razorpay",
+      };
+    },
+  )
+  .handler(async ({ context, data }) => {
+    const sb = context.supabase;
+
+    // -------------------------------------------------------
+    // Generate order number
+    // -------------------------------------------------------
+
+    const orderNumber =
+      `ORD-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 7)
+        .toUpperCase()}`;
+
+    // -------------------------------------------------------
+    // Create order
+    // -------------------------------------------------------
 
     const {
-      data: slugMatch,
-      error: slugLookupError,
+      data: order,
+      error: orderError,
     } = await sb
-      .from("products")
-      .select("id")
-      .eq("slug", normalizedSlug)
-      .neq(
-        "id",
-        id ??
-          "00000000-0000-0000-0000-000000000000",
+      .from("orders")
+      .insert({
+        order_number: orderNumber,
+
+        customer_name: data.customer_name,
+        customer_email: data.customer_email,
+        customer_phone: data.customer_phone,
+
+        shipping_address: data.shipping_address,
+        shipping_city: data.shipping_city,
+        shipping_state: data.shipping_state,
+        shipping_pincode: data.shipping_pincode,
+
+        subtotal: data.subtotal,
+        shipping_charge: data.shipping_charge,
+        discount: data.discount,
+        total_amount: data.total_amount,
+
+        payment_method: data.payment_method,
+
+        payment_status: "pending",
+        order_status: "pending",
+
+        coupon_code: data.coupon_code ?? null,
+        coupon_discount: data.coupon_discount,
+
+        // Authenticated Supabase user
+        user_id: context.userId,
+        customer_id: context.userId,
+      })
+      .select(
+        "id, order_number, total_amount",
       )
-      .maybeSingle();
+      .single();
 
-    if (slugLookupError) {
+    if (orderError || !order) {
+      console.error(
+        "[createCustomerOrder] Order insert error:",
+        orderError,
+      );
+
       throw new Error(
-        `Unable to check Product Link / Slug: ${slugLookupError.message}`,
+        orderError?.message ??
+          "Unable to create order",
       );
     }
 
-    if (slugMatch) {
-      throw new Error(
-        "A product with this Product Link / Slug already exists. Please use a unique slug.",
-      );
-    }
+    // -------------------------------------------------------
+    // Create order items
+    // -------------------------------------------------------
 
-    /* -----------------------------------------
-       SKU CHECK
-    ----------------------------------------- */
+    const orderItems = data.items.map((item) => ({
+      order_id: order.id,
 
-    if (normalizedSku) {
-      const {
-        data: skuMatch,
-        error: skuLookupError,
-      } = await sb
-        .from("products")
-        .select("id")
-        .eq("sku", normalizedSku)
-        .neq(
-          "id",
-          id ??
-            "00000000-0000-0000-0000-000000000000",
-        )
-        .maybeSingle();
+      product_id: item.product_id,
+      product_name: item.product_name,
+      product_slug: item.product_slug ?? null,
 
-      if (skuLookupError) {
-        throw new Error(
-          `Unable to check SKU: ${skuLookupError.message}`,
-        );
-      }
-
-      if (skuMatch) {
-        throw new Error(
-          "A product with this SKU already exists. Please use a unique SKU.",
-        );
-      }
-    }
-
-    fields.slug = normalizedSlug;
-
-    if (fields.sku != null) {
-      fields.sku =
-        normalizedSku || null;
-    }
-
-    /*
-     * RING SIZES NORMALIZATION
-     *
-     * Product table receives:
-     * ring_sizes: string[] | null
-     */
-    if (Array.isArray(fields.ring_sizes)) {
-      fields.ring_sizes = Array.from(
-        new Set(
-          fields.ring_sizes
-            .map((size) =>
-              String(size).trim(),
-            )
-            .filter(Boolean),
+      quantity:
+        Math.max(
+          1,
+          Number(item.quantity) || 1,
         ),
+
+      unit_price:
+        Number(item.unit_price) || 0,
+
+      total_price:
+        Number(item.total_price) || 0,
+
+      product_image:
+        item.product_image ?? null,
+
+      ring_size:
+        item.ring_size ?? null,
+    }));
+
+    const {
+      error: itemsError,
+    } = await sb
+      .from("order_items")
+      .insert(orderItems);
+
+    if (itemsError) {
+      console.error(
+        "[createCustomerOrder] Order items error:",
+        itemsError,
       );
-    } else {
-      fields.ring_sizes = null;
-    }
 
-    /* -----------------------------------------
-       UPDATE / CREATE
-    ----------------------------------------- */
-
-    if (id) {
-      const {
-        data: before,
-      } = await sb
-        .from("products")
-        .select("price,status,ring_sizes")
-        .eq("id", id)
-        .maybeSingle();
-
-      const { error } =
-        await sb
-          .from("products")
-          .update(fields)
-          .eq("id", id);
-
-      if (error) {
-        throw new Error(error.message);
-      }
-
-      if (
-        before &&
-        Number(before.price) !==
-          Number(fields.price)
-      ) {
-        await logAudit(
-          {
-            supabase:
-              sb as unknown as AdminSb,
-          },
-          "price_change",
-          "product",
-          id,
-          {
-            from: before.price,
-            to: fields.price,
-          },
-        );
-      }
-
-      if (
-        before &&
-        before.status !== fields.status
-      ) {
-        await logAudit(
-          {
-            supabase:
-              sb as unknown as AdminSb,
-          },
-          "status_change",
-          "product",
-          id,
-          {
-            from: before.status,
-            to: fields.status,
-          },
-        );
-      }
-
-      /*
-       * Log ring size changes
-       */
-      const beforeSizes =
-        Array.isArray(
-          before?.ring_sizes,
-        )
-          ? before.ring_sizes
-          : [];
-
-      const afterSizes =
-        Array.isArray(
-          fields.ring_sizes,
-        )
-          ? fields.ring_sizes
-          : [];
-
-      if (
-        JSON.stringify(
-          beforeSizes,
-        ) !==
-        JSON.stringify(
-          afterSizes,
-        )
-      ) {
-        await logAudit(
-          {
-            supabase:
-              sb as unknown as AdminSb,
-          },
-          "ring_sizes_change",
-          "product",
-          id,
-          {
-            from: beforeSizes,
-            to: afterSizes,
-          },
-        );
-      }
-    } else {
-      const {
-        data: created,
-        error,
-      } = await sb
-        .from("products")
-        .insert(fields)
-        .select("id")
-        .single();
-
-      if (error) {
-        throw new Error(error.message);
-      }
-
-      productId = created.id;
-
-      await logAudit(
-        {
-          supabase:
-            sb as unknown as AdminSb,
-        },
-        "create",
-        "product",
-        productId,
-        {
-          name: fields.name,
-          ring_sizes:
-            fields.ring_sizes ?? null,
-        },
-      );
-    }
-
-    /* -----------------------------------------
-       PRODUCT IMAGES
-    ----------------------------------------- */
-
-    const { data: existing } =
+      // Rollback order
       await sb
-        .from("product_images")
-        .select("id,storage_path")
-        .eq(
-          "product_id",
-          productId!,
-        );
-
-    const keepIds = new Set(
-      images
-        .filter((i) => i.id)
-        .map((i) => i.id!),
-    );
-
-    const removed = (
-      existing ?? []
-    ).filter(
-      (e) => !keepIds.has(e.id),
-    );
-
-    if (removed.length) {
-      await sb
-        .from("product_images")
+        .from("orders")
         .delete()
-        .in(
-          "id",
-          removed.map(
-            (r) => r.id,
-          ),
-        );
+        .eq("id", order.id);
 
-      const paths = removed
-        .map(
-          (r) => r.storage_path,
-        )
-        .filter(
-          (p): p is string =>
-            !!p,
-        );
-
-      if (paths.length) {
-        await sb.storage
-          .from("media")
-          .remove(paths);
-      }
-
-      await logAudit(
-        {
-          supabase:
-            sb as unknown as AdminSb,
-        },
-        "image_delete",
-        "product",
-        productId,
-        {
-          count:
-            removed.length,
-        },
-      );
+      throw new Error(itemsError.message);
     }
 
-    for (
-      const [i, img] of images.entries()
+    // -------------------------------------------------------
+    // Razorpay configuration
+    // -------------------------------------------------------
+
+    const keyId = process.env.RAZORPAY_KEY_ID;
+const keySecret = process.env.RAZORPAY_KEY_SECRET;
+
+console.log("========== RAZORPAY DEBUG ==========");
+console.log("KEY ID:", keyId);
+console.log("SECRET EXISTS:", !!keySecret);
+console.log("SECRET LENGTH:", keySecret?.length);
+console.log("====================================");
+
+if (!keyId || !keySecret) {
+  console.error("[Razorpay] Credentials missing", {
+    keyIdExists: !!keyId,
+    secretExists: !!keySecret,
+  });
+
+  throw new Error("Razorpay server credentials are missing");
+}
+
+    // -------------------------------------------------------
+    // Convert INR to paise
+    // -------------------------------------------------------
+
+    const razorpayAmount =
+      Math.round(
+        Number(order.total_amount) * 100,
+      );
+
+    if (
+      !Number.isFinite(razorpayAmount) ||
+      razorpayAmount <= 0
     ) {
-      if (img.id) {
-        await sb
-          .from("product_images")
-          .update({
-            sort_order: i,
-            alt:
-              img.alt ?? null,
-          })
-          .eq(
-            "id",
-            img.id,
-          );
-      } else {
-        await sb
-          .from("product_images")
-          .insert({
-            product_id:
-              productId!,
-            url: img.url,
-            storage_path:
-              img.storage_path ??
-              null,
-            alt:
-              img.alt ?? null,
-            sort_order: i,
-          });
-      }
+      throw new Error(
+        "Invalid Razorpay amount",
+      );
     }
 
-    /* -----------------------------------------
-       COLLECTIONS
-    ----------------------------------------- */
+    // -------------------------------------------------------
+    // Razorpay authentication
+    // -------------------------------------------------------
 
-    await sb
-      .from("product_collections")
-      .delete()
-      .eq(
-        "product_id",
-        productId!,
+    const auth = Buffer
+      .from(`${keyId}:${keySecret}`)
+      .toString("base64");
+
+    // -------------------------------------------------------
+    // Create Razorpay order
+    // -------------------------------------------------------
+
+    const razorpayResponse =
+      await fetch(
+        "https://api.razorpay.com/v1/orders",
+        {
+          method: "POST",
+
+          headers: {
+            Authorization: `Basic ${auth}`,
+            "Content-Type":
+              "application/json",
+          },
+
+          body: JSON.stringify({
+            amount: razorpayAmount,
+            currency: "INR",
+            receipt: order.order_number,
+
+            notes: {
+              order_id: order.id,
+              customer_id:
+                context.userId,
+            },
+          }),
+        },
+      );
+const razorpayText = await razorpayResponse.text();
+
+console.log(
+  "[Razorpay] HTTP STATUS:",
+  razorpayResponse.status
+);
+
+console.log(
+  "[Razorpay] RESPONSE:",
+  razorpayText
+);
+
+let razorpayData: {
+  id?: string;
+  amount?: number;
+  currency?: string;
+  error?: {
+    code?: string;
+    description?: string;
+  };
+};
+
+try {
+  razorpayData = JSON.parse(razorpayText);
+} catch {
+  throw new Error(
+    `Invalid Razorpay response: ${razorpayText}`
+  );
+}
+    if (
+      !razorpayResponse.ok ||
+      !razorpayData.id
+    ) {
+      console.error(
+        "[createCustomerOrder] Razorpay error:",
+        razorpayData,
       );
 
-    if (collectionIds.length) {
-      await sb
-        .from("product_collections")
-        .insert(
-          collectionIds.map(
-            (cid, i) => ({
-              product_id:
-                productId!,
-              collection_id:
-                cid,
-              sort_order: i,
-            }),
-          ),
-        );
+      throw new Error(
+        razorpayData.error?.description ??
+          "Unable to create Razorpay order",
+      );
     }
+
+    // -------------------------------------------------------
+    // Save Razorpay order ID
+    // -------------------------------------------------------
+
+    const {
+      error: updateError,
+    } = await sb
+      .from("orders")
+      .update({
+        razorpay_order_id:
+          razorpayData.id,
+      })
+      .eq("id", order.id);
+
+    if (updateError) {
+      console.error(
+        "[createCustomerOrder] Razorpay ID update error:",
+        updateError,
+      );
+
+      throw new Error(
+        updateError.message,
+      );
+    }
+
+    // -------------------------------------------------------
+    // Return checkout data
+    // -------------------------------------------------------
 
     return {
-      id: productId!,
-      slug: fields.slug,
+      success: true,
+
+      orderId: order.id,
+
+      orderNumber:
+        order.order_number,
+
+      razorpayOrderId:
+        razorpayData.id,
+
+      razorpayKeyId: keyId,
+
+      amount:
+        razorpayAmount,
+
+      currency:
+        razorpayData.currency ?? "INR",
     };
   });
 
-/* =========================================================
-   PRODUCT ACTIONS
-========================================================= */
 
-export const adminProductAction =
-  createServerFn({
-    method: "POST",
+
+/**
+ * Creates a website enquiry from checkout/contact information.
+ * The enquiries table does not have separate address/email fields, so the
+ * additional checkout details are stored in the message field.
+ */
+export const createCustomerEnquiry = createServerFn({
+  method: "POST",
+})
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: {
+    customer_name: string;
+    customer_email?: string | null;
+    customer_phone: string;
+
+    customer_address?: string | null;
+    customer_city?: string | null;
+    customer_state?: string | null;
+    customer_pincode?: string | null;
+
+    message?: string | null;
+
+    items?: {
+      product_id: string;
+      product_name: string;
+      product_slug?: string | null;
+      quantity: number;
+      unit_price?: number;
+      total_price?: number;
+      product_image?: string | null;
+      ring_size?: string | null;
+    }[];
+  }) => {
+    if (!i.customer_name?.trim()) {
+      throw new Error("Customer name is required");
+    }
+
+    if (!i.customer_phone?.trim()) {
+      throw new Error("Customer phone is required");
+    }
+
+    return {
+      ...i,
+      customer_name: i.customer_name.trim(),
+      customer_phone: i.customer_phone.trim(),
+      customer_email: i.customer_email?.trim() || null,
+    };
   })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .inputValidator(
-      (i: {
-        id: string;
+  .handler(async ({ context, data }) => {
+    const firstItem = data.items?.[0];
 
-        action:
-          | "trash"
-          | "restore"
-          | "delete_forever"
-          | "duplicate"
-          | "publish"
-          | "hide"
-          | "draft"
-          | "out_of_stock"
-          | "in_stock"
-          | "toggle_featured"
-          | "toggle_best"
-          | "toggle_new";
-      }) => i,
-    )
-    .handler(
-      async ({
-        context,
-        data,
-      }) => {
-        await assertAdmin(context);
+    const enquiryMessage = {
+      message: data.message?.trim() || null,
 
-        const sb =
-          context.supabase;
+      email: data.customer_email,
 
-        const {
-          id,
-          action,
-        } = data;
+      address: data.customer_address?.trim() || null,
 
-        switch (action) {
-          case "trash":
-            await sb
-              .from("products")
-              .update({
-                deleted_at:
-                  new Date().toISOString(),
-              })
-              .eq("id", id);
+      city: data.customer_city?.trim() || null,
 
-            await logAudit(
-              {
-                supabase:
-                  sb as unknown as AdminSb,
-              },
-              "trash",
-              "product",
-              id,
-            );
+      state: data.customer_state?.trim() || null,
 
-            break;
+      pincode: data.customer_pincode?.trim() || null,
 
-          case "restore":
-            await sb
-              .from("products")
-              .update({
-                deleted_at:
-                  null,
-              })
-              .eq("id", id);
+      items: data.items ?? [],
 
-            break;
+      userId: context.userId,
+    };
 
-          case "delete_forever": {
-            const {
-              data: imgs,
-            } = await sb
-              .from("product_images")
-              .select(
-                "storage_path",
-              )
-              .eq(
-                "product_id",
-                id,
-              );
+    const {
+      data: enquiry,
+      error,
+    } = await context.supabase
+      .from("enquiries")
+      .insert({
+        product_id: firstItem?.product_id ?? null,
 
-            const paths =
-              (imgs ?? [])
-                .map(
-                  (i) =>
-                    i.storage_path,
-                )
-                .filter(
-                  (
-                    p,
-                  ): p is string =>
-                    !!p,
-                );
+        product_name:
+          firstItem?.product_name ?? "Website enquiry",
 
-            if (paths.length) {
-              await sb.storage
-                .from("media")
-                .remove(paths);
-            }
+        customer_name: data.customer_name,
 
-            await sb
-              .from("products")
-              .delete()
-              .eq("id", id);
+        phone: data.customer_phone,
 
-            await logAudit(
-              {
-                supabase:
-                  sb as unknown as AdminSb,
-              },
-              "delete_forever",
-              "product",
-              id,
-            );
+        message: JSON.stringify(enquiryMessage),
 
-            break;
-          }
+        channel: "website",
 
-          case "duplicate": {
-            const {
-              data: p,
-            } = await sb
-              .from("products")
-              .select("*")
-              .eq("id", id)
-              .single();
+        status: "new",
+      })
+      .select("id")
+      .single();
 
-            const {
-              data: imgs,
-            } = await sb
-              .from("product_images")
-              .select(
-                "url,storage_path,alt,sort_order",
-              )
-              .eq(
-                "product_id",
-                id,
-              );
+    if (error) {
+      console.error(
+        "[createCustomerEnquiry] Supabase error:",
+        error
+      );
+
+      throw new Error(error.message);
+    }
 
-            const {
-              data: cols,
-            } = await sb
-              .from(
-                "product_collections",
-              )
-              .select(
-                "collection_id",
-              )
-              .eq(
-                "product_id",
-                id,
-              );
+    return {
+      success: true,
+      enquiryId: enquiry?.id ?? null,
+    };
+  });
+  export const adminUpdateEnquiry = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: { id: string; status: string }) => i)
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context);
 
-            const {
-              id: _oldId,
-              created_at: _c,
-              updated_at: _u,
-              search_text: _s,
-              ...rest
-            } = p as Record<
-              string,
-              unknown
-            > & {
-              id: string;
-            };
-
-            const suffix =
-              Date.now()
-                .toString(36)
-                .slice(-4);
-
-            /*
-             * ring_sizes is already inside `rest`
-             * because it belongs to products table.
-             *
-             * Therefore duplicated ring products
-             * retain their available ring sizes.
-             */
-
-            const {
-              data: created,
-              error,
-            } = await sb
-              .from("products")
-              .insert({
-                ...(rest as never),
-
-                name: `${p!.name} (Copy)`,
-
-                slug: `${p!.slug}-copy-${suffix}`,
-
-                sku: p!.sku
-                  ? `${p!.sku}-C${suffix}`
-                  : null,
-
-                status: "draft",
-              })
-              .select("id")
-              .single();
-
-            if (error) {
-              throw new Error(
-                error.message,
-              );
-            }
-
-            if (imgs?.length) {
-              await sb
-                .from(
-                  "product_images",
-                )
-                .insert(
-                  imgs.map(
-                    (i) => ({
-                      ...i,
-                      product_id:
-                        created.id,
-                    }),
-                  ),
-                );
-            }
-
-            if (cols?.length) {
-              await sb
-                .from(
-                  "product_collections",
-                )
-                .insert(
-                  cols.map(
-                    (c) => ({
-                      product_id:
-                        created.id,
-                      collection_id:
-                        c.collection_id,
-                    }),
-                  ),
-                );
-            }
-
-            return {
-              id: created.id,
-            };
-          }
-
-          case "publish":
-          case "hide":
-          case "draft":
-            await sb
-              .from("products")
-              .update({
-                status:
-                  action ===
-                  "publish"
-                    ? "published"
-                    : action,
-              })
-              .eq("id", id);
-
-            await logAudit(
-              {
-                supabase:
-                  sb as unknown as AdminSb,
-              },
-              "status_change",
-              "product",
-              id,
-              {
-                to: action,
-              },
-            );
-
-            break;
-
-          case "out_of_stock":
-          case "in_stock":
-            await sb
-              .from("products")
-              .update({
-                stock_status:
-                  action,
-              })
-              .eq("id", id);
-
-            break;
-
-          default: {
-            const col =
-              action ===
-              "toggle_featured"
-                ? "featured"
-                : action ===
-                    "toggle_best"
-                  ? "best_seller"
-                  : "is_new";
-
-            const {
-              data: p,
-            } = await sb
-              .from("products")
-              .select(col)
-              .eq("id", id)
-              .single();
-
-            await sb
-              .from("products")
-              .update({
-                [col]: !(
-                  p as Record<
-                    string,
-                    boolean
-                  >
-                )[col],
-          })
-              .eq("id", id);
-          }
-        }
-
-        return {
-          ok: true,
-        };
-      },
-    );
-
-/* =========================================================
-   MEDIA UPLOAD
-========================================================= */
-
-export const adminUploadMedia =
-  createServerFn({
-    method: "POST",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .inputValidator(
-      (i: {
-        fileName: string;
-        contentType: string;
-        base64: string;
-        kind?: string;
-      }) => {
-        if (!i.base64) {
-          throw new Error(
-            "No file data",
-          );
-        }
-
-        return i;
-      },
-    )
-    .handler(
-      async ({
-        context,
-        data,
-      }) => {
-        await assertAdmin(context);
-
-        const sb =
-          context.supabase;
-
-        const bytes =
-          Uint8Array.from(
-            atob(data.base64),
-            (c) =>
-              c.charCodeAt(0),
-          );
-
-        if (
-          bytes.byteLength >
-          100 * 1024 * 1024
-        ) {
-          throw new Error(
-            "File is larger than 100 MB",
-          );
-        }
-
-        const safe =
-          data.fileName
-            .replace(
-              /[^\w\.-]/g,
-              "_",
-            )
-            .slice(-80);
-
-        const path = `${
-          data.kind ??
-          "product"
-        }/${Date.now()}-${Math.random()
-          .toString(36)
-          .slice(
-            2,
-            8,
-          )}-${safe}`;
-
-        const {
-          error,
-        } = await sb.storage
-          .from("media")
-          .upload(
-            path,
-            bytes,
-            {
-              contentType:
-                data.contentType,
-              upsert: false,
-            },
-          );
-
-        if (error) {
-          throw new Error(
-            error.message,
-          );
-        }
-
-        const url =
-          `/api/public/media/${path}`;
-
-        await sb
-          .from("media")
-          .insert({
-            path,
-            url,
-            file_name: safe,
-            mime_type:
-              data.contentType,
-            size_bytes:
-              bytes.byteLength,
-            kind:
-              data.kind ??
-              "product",
-            created_by:
-              context.userId,
-          });
-
-        return {
-          url,
-          path,
-        };
-      },
-    );
-
-export const adminListMedia =
-  createServerFn({
-    method: "POST",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .inputValidator(
-      (i: {
-        kind?: string;
-      }) => i ?? {},
-    )
-    .handler(
-      async ({
-        context,
-        data,
-      }) => {
-        await assertAdmin(context);
-
-        let q =
-          context.supabase
-            .from("media")
-            .select("*")
-            .order(
-              "created_at",
-              {
-                ascending: false,
-              },
-            )
-            .limit(300);
-
-        if (data.kind) {
-          q = q.eq(
-            "kind",
-            data.kind,
-          );
-        }
-
-        const {
-          data: rows,
-        } = await q;
-
-        const media =
-          (rows ?? []) as Media[];
-
-        const {
-          data: usedImgs,
-        } =
-          await context.supabase
-            .from(
-              "product_images",
-            )
-            .select(
-              "storage_path,product:products(name,slug)",
-            )
-            .not(
-              "storage_path",
-              "is",
-              null,
-            );
-
-        const usage =
-          new Map<
-            string,
-            string
-          >();
-
-        for (
-          const u of (usedImgs ??
-            []) as {
-            storage_path:
-              | string
-              | null;
-
-            product: {
-              name: string;
-            } | null;
-          }[]
-        ) {
-          if (
-            u.storage_path &&
-            u.product
-          ) {
-            usage.set(
-              u.storage_path,
-              u.product.name,
-            );
-          }
-        }
-
-        return media.map(
-          (m) => ({
-            ...m,
-            used_by:
-              usage.get(
-                m.path,
-              ) ?? null,
-          }),
-        );
-      },
-    );
-
-export const adminDeleteMedia =
-  createServerFn({
-    method: "POST",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .inputValidator(
-      (i: {
-        id: string;
-        path: string;
-      }) => i,
-    )
-    .handler(
-      async ({
-        context,
-        data,
-      }) => {
-        await assertAdmin(context);
-
-        const sb =
-          context.supabase;
-
-        await sb.storage
-          .from("media")
-          .remove([
-            data.path,
-          ]);
-
-        await sb
-          .from("product_images")
-          .delete()
-          .eq(
-            "storage_path",
-            data.path,
-          );
-
-        await sb
-          .from("media")
-          .delete()
-          .eq(
-            "id",
-            data.id,
-          );
-
-        await logAudit(
-          {
-            supabase:
-              sb as unknown as AdminSb,
-          },
-          "media_delete",
-          "media",
-          data.id,
-          {
-            path: data.path,
-          },
-        );
-
-        return {
-          ok: true,
-        };
-      },
-    );
-
-/* =========================================================
-   LOOKUPS
-========================================================= */
-
-export const adminGetLookups =
-  createServerFn({
-    method: "GET",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .handler(
-      async ({
-        context,
-      }) => {
-        await assertAdmin(context);
-
-        const sb =
-          context.supabase;
-
-        const [
-          { data: categories },
-          { data: collections },
-        ] = await Promise.all([
-          sb
-            .from("categories")
-            .select("*")
-            .order(
-              "sort_order",
-            ),
-
-          sb
-            .from("collections")
-            .select("*")
-            .order("kind")
-            .order(
-              "sort_order",
-            ),
-        ]);
-
-        return {
-          categories:
-            (categories ??
-              []) as Category[],
-
-          collections:
-            (collections ??
-              []) as Collection[],
-        };
-      },
-    );
-
-export const adminSaveCategory =
-  createServerFn({
-    method: "POST",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .inputValidator(
-      (
-        i: Partial<Category> & {
-          name: string;
-          slug: string;
-        },
-      ) => i,
-    )
-    .handler(
-      async ({
-        context,
-        data,
-      }) => {
-        await assertAdmin(context);
-
-        const {
-          id,
-          ...fields
-        } = data;
-
-        const q = id
-          ? context.supabase
-              .from(
-                "categories",
-              )
-              .update(fields)
-              .eq("id", id)
-          : context.supabase
-              .from(
-                "categories",
-              )
-              .insert(
-                fields as never,
-              );
-
-        const {
-          error,
-        } = await q;
-
-        if (error) {
-          throw new Error(
-            error.message,
-          );
-        }
-
-        return {
-          ok: true,
-        };
-      },
-    );
-
-export const adminDeleteCategory =
-  createServerFn({
-    method: "POST",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .inputValidator(
-      (i: {
-        id: string;
-      }) => i,
-    )
-    .handler(
-      async ({
-        context,
-        data,
-      }) => {
-        await assertAdmin(context);
-
-        const {
-          error,
-        } = await context.supabase
-          .from(
-            "categories",
-          )
-          .delete()
-          .eq(
-            "id",
-            data.id,
-          );
-
-        if (error) {
-          throw new Error(
-            error.message,
-          );
-        }
-
-        return {
-          ok: true,
-        };
-      },
-    );
-
-export const adminSaveCollection =
-  createServerFn({
-    method: "POST",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .inputValidator(
-      (
-        i: Partial<Collection> & {
-          name: string;
-          slug: string;
-          kind: string;
-        },
-      ) => i,
-    )
-    .handler(
-      async ({
-        context,
-        data,
-      }) => {
-        await assertAdmin(context);
-
-        const {
-          id,
-          ...fields
-        } = data;
-
-        const q = id
-          ? context.supabase
-              .from(
-                "collections",
-              )
-              .update(fields)
-              .eq("id", id)
-          : context.supabase
-              .from(
-                "collections",
-              )
-              .insert(
-                fields as never,
-              );
-
-        const {
-          error,
-        } = await q;
-
-        if (error) {
-          throw new Error(
-            error.message,
-          );
-        }
-
-        return {
-          ok: true,
-        };
-      },
-    );
-
-export const adminDeleteCollection =
-  createServerFn({
-    method: "POST",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .inputValidator(
-      (i: {
-        id: string;
-      }) => i,
-    )
-    .handler(
-      async ({
-        context,
-        data,
-      }) => {
-        await assertAdmin(context);
-
-        const {
-          error,
-        } = await context.supabase
-          .from(
-            "collections",
-          )
-          .delete()
-          .eq(
-            "id",
-            data.id,
-          );
-
-        if (error) {
-          throw new Error(
-            error.message,
-          );
-        }
-
-        return {
-          ok: true,
-        };
-      },
-    );
-
-/* =========================================================
-   RATES
-========================================================= */
-
-export const adminGetRates =
-  createServerFn({
-    method: "GET",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .handler(
-      async ({
-        context,
-      }) => {
-        await assertAdmin(context);
-
-        const {
-          data,
-        } = await context.supabase
-          .from("rates")
-          .select("*")
-          .order(
-            "sort_order",
-          );
-
-        return (data ??
-          []) as Rate[];
-      },
-    );
-
-export const adminSaveRate =
-  createServerFn({
-    method: "POST",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .inputValidator(
-      (i: {
-        key: string;
-        current_rate:
-          | number
-          | null;
-        notes?: string | null;
-      }) => i,
-    )
-    .handler(
-      async ({
-        context,
-        data,
-      }) => {
-        await assertAdmin(context);
-
-        const sb =
-          context.supabase;
-
-        const {
-          error,
-        } = await sb
-          .from("rates")
-          .update({
-            current_rate:
-              data.current_rate,
-            notes:
-              data.notes ?? null,
-          })
-          .eq(
-            "key",
-            data.key,
-          );
-
-        if (error) {
-          throw new Error(
-            error.message,
-          );
-        }
-
-        await logAudit(
-          {
-            supabase:
-              sb as unknown as AdminSb,
-          },
-          "rate_update",
-          "rate",
-          data.key,
-          {
-            to: data.current_rate,
-          },
-        );
-
-        return {
-          ok: true,
-        };
-      },
-    );
-
-/* =========================================================
-   OFFERS
-========================================================= */
-
-export const adminGetOffers =
-  createServerFn({
-    method: "GET",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .handler(
-      async ({
-        context,
-      }) => {
-        await assertAdmin(context);
-
-        const {
-          data,
-        } = await context.supabase
-          .from("offers")
-          .select("*")
-          .order(
-            "sort_order",
-          );
-
-        return (data ??
-          []) as Offer[];
-      },
-    );
-
-export const adminSaveOffer =
-  createServerFn({
-    method: "POST",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .inputValidator(
-      (
-        i: Partial<Offer> & {
-          title: string;
-        },
-      ) => i,
-    )
-    .handler(
-      async ({
-        context,
-        data,
-      }) => {
-        await assertAdmin(context);
-
-        const {
-          id,
-          ...fields
-        } = data;
-
-        const {
-          error,
-        } = id
-          ? await context.supabase
-              .from("offers")
-              .update(fields)
-              .eq(
-                "id",
-                id,
-              )
-          : await context.supabase
-              .from("offers")
-              .insert(
-                fields as never,
-              );
-
-        if (error) {
-          throw new Error(
-            error.message,
-          );
-        }
-
-        return {
-          ok: true,
-        };
-      },
-    );
-
-export const adminDeleteOffer =
-  createServerFn({
-    method: "POST",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .inputValidator(
-      (i: {
-        id: string;
-      }) => i,
-    )
-    .handler(
-      async ({
-        context,
-        data,
-      }) => {
-        await assertAdmin(context);
-
-        await context.supabase
-          .from("offers")
-          .delete()
-          .eq(
-            "id",
-            data.id,
-          );
-
-        return {
-          ok: true,
-        };
-      },
-    );
-
-/* =========================================================
-   REVIEWS
-========================================================= */
-
-export const adminGetReviews =
-  createServerFn({
-    method: "GET",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .handler(
-      async ({
-        context,
-      }) => {
-        await assertAdmin(context);
-
-        const {
-          data,
-        } = await context.supabase
-          .from("reviews")
-          .select("*")
-          .order(
-            "sort_order",
-          );
-
-        return (data ??
-          []) as Review[];
-      },
-    );
-
-export const adminSaveReview =
-  createServerFn({
-    method: "POST",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .inputValidator(
-      (
-        i: Partial<Review> & {
-          customer_name: string;
-          review_text: string;
-        },
-      ) => i,
-    )
-    .handler(
-      async ({
-        context,
-        data,
-      }) => {
-        await assertAdmin(context);
-
-        const {
-          id,
-          ...fields
-        } = data;
-
-        const {
-          error,
-        } = id
-          ? await context.supabase
-              .from("reviews")
-              .update(fields)
-              .eq(
-                "id",
-                id,
-              )
-          : await context.supabase
-              .from("reviews")
-              .insert(
-                fields as never,
-              );
-
-        if (error) {
-          throw new Error(
-            error.message,
-          );
-        }
-
-        return {
-          ok: true,
-        };
-      },
-    );
-
-export const adminDeleteReview =
-  createServerFn({
-    method: "POST",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .inputValidator(
-      (i: {
-        id: string;
-      }) => i,
-    )
-    .handler(
-      async ({
-        context,
-        data,
-      }) => {
-        await assertAdmin(context);
-
-        await context.supabase
-          .from("reviews")
-          .delete()
-          .eq(
-            "id",
-            data.id,
-          );
-
-        return {
-          ok: true,
-        };
-      },
-    );
-
-/* =========================================================
-   HOMEPAGE
-========================================================= */
-
-export const adminGetHomepage =
-  createServerFn({
-    method: "GET",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .handler(
-      async ({
-        context,
-      }) => {
-        await assertAdmin(context);
-
-        const sb =
-          context.supabase;
-
-        const [
-          { data: sections },
-          { data: settings },
-        ] = await Promise.all([
-          sb
-            .from(
-              "homepage_sections",
-            )
-            .select("*")
-            .order(
-              "sort_order",
-            ),
-
-          sb
-            .from("settings")
-            .select("*"),
-        ]);
-
-        return {
-          sections:
-            (sections ??
-              []) as HomepageSection[],
-
-          settings:
-            (settings ??
-              []) as Setting[],
-        };
-      },
-    );
-
-export const adminSaveSection =
-  createServerFn({
-    method: "POST",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .inputValidator(
-      (i: {
-        key: string;
-        title?: string;
-        subtitle?: string | null;
-        is_visible?: boolean;
-        sort_order?: number;
-      }) => i,
-    )
-    .handler(
-      async ({
-        context,
-        data,
-      }) => {
-        await assertAdmin(context);
-
-        const {
-          key,
-          ...fields
-        } = data;
-
-        const {
-          error,
-        } = await context.supabase
-          .from(
-            "homepage_sections",
-          )
-          .update(fields)
-          .eq(
-            "key",
-            key,
-          );
-
-        if (error) {
-          throw new Error(
-            error.message,
-          );
-        }
-
-        return {
-          ok: true,
-        };
-      },
-    );
-
-export const adminSaveSetting =
-  createServerFn({
-    method: "POST",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .inputValidator(
-      (i: {
-        key: string;
-        value: Record<
-          string,
-          unknown
-        >;
-      }) => i,
-    )
-    .handler(
-      async ({
-        context,
-        data,
-      }) => {
-        await assertAdmin(context);
-
-        const sb =
-          context.supabase;
-
-        const {
-          error,
-        } = await sb
-          .from("settings")
-          .upsert(
-            {
-              key: data.key,
-              value:
-                data.value as Json,
-            },
-            {
-              onConflict:
-                "key",
-            },
-          );
-
-        if (error) {
-          throw new Error(
-            error.message,
-          );
-        }
-
-        await logAudit(
-          {
-            supabase:
-              sb as unknown as AdminSb,
-          },
-          "settings_update",
-          "setting",
-          data.key,
-        );
-
-        return {
-          ok: true,
-        };
-      },
-    );
-
-/* =========================================================
-   ENQUIRIES
-========================================================= */
-
-export const adminGetEnquiries =
-  createServerFn({
-    method: "GET",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .handler(
-      async ({
-        context,
-      }) => {
-        await assertAdmin(context);
-
-        const {
-          data,
-        } = await context.supabase
-          .from("enquiries")
-          .select("*")
-          .order(
-            "created_at",
-            {
-              ascending: false,
-            },
-          )
-          .limit(300);
-
-        return (data ??
-          []) as Enquiry[];
-      },
-    );
-
-export const adminUpdateEnquiry =
-  createServerFn({
-    method: "POST",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .inputValidator(
-      (i: {
-        id: string;
-        status: string;
-      }) => i,
-    )
-    .handler(
-      async ({
-        context,
-        data,
-      }) => {
-        await assertAdmin(context);
-
-        await context.supabase
-          .from("enquiries")
-          .update({
-            status:
-              data.status,
-          })
-          .eq(
-            "id",
-            data.id,
-          );
-
-        return {
-          ok: true,
-        };
-      },
-    );
-
-/* =========================================================
-   ADMIN INVITES
-========================================================= */
-
-export const adminGetAdmins =
-  createServerFn({
-    method: "GET",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .handler(
-      async ({
-        context,
-      }) => {
-        await assertAdmin(context);
-
-        const {
-          data,
-        } = await context.supabase
-          .from(
-            "admin_invites",
-          )
-          .select("*")
-          .order(
-            "created_at",
-          );
-
-        return {
-          invites:
-            data ?? [],
-        };
-      },
-    );
-
-export const adminInvite =
-  createServerFn({
-    method: "POST",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .inputValidator(
-      (i: {
-        email: string;
-      }) => {
-        if (
-          !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(
-            i.email ?? "",
-          )
-        ) {
-          throw new Error(
-            "Enter a valid email",
-          );
-        }
-
-        return {
-          email:
-            i.email
-              .toLowerCase()
-              .trim(),
-        };
-      },
-    )
-    .handler(
-      async ({
-        context,
-        data,
-      }) => {
-        const uid =
-          await assertAdmin(
-            context,
-          );
-
-        const {
-          error,
-        } = await context.supabase
-          .from(
-            "admin_invites",
-          )
-          .insert({
-            email:
-              data.email,
-            invited_by:
-              uid,
-          });
-
-        if (
-          error &&
-          !error.message.includes(
-            "duplicate",
-          )
-        ) {
-          throw new Error(
-            error.message,
-          );
-        }
-
-        return {
-          ok: true,
-        };
-      },
-    );
-
-export const adminRemoveInvite =
-  createServerFn({
-    method: "POST",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .inputValidator(
-      (i: {
-        email: string;
-      }) => i,
-    )
-    .handler(
-      async ({
-        context,
-        data,
-      }) => {
-        await assertAdmin(context);
-
-        await context.supabase
-          .from(
-            "admin_invites",
-          )
-          .delete()
-          .eq(
-            "email",
-            data.email,
-          );
-
-        return {
-          ok: true,
-        };
-      },
-    );
-
-/* =========================================================
-   CUSTOMER ENQUIRY
-========================================================= */
-
-export const createCustomerEnquiry =
-  createServerFn({
-    method: "POST",
-  })
-    .validator(
-      (data: {
-        customer_name: string;
-        customer_email?: string;
-        customer_phone: string;
-        customer_address?: string;
-        customer_city?: string;
-        customer_state?: string;
-        customer_pincode?: string;
-        message?: string;
-
-        items: Array<{
-          product_id: string;
-          product_name: string;
-          product_slug?: string;
-          quantity: number;
-          unit_price: number;
-          total_price: number;
-          product_image?: string;
-
-          /*
-           * Ring size selected by customer.
-           */
-          ring_size?: string | null;
-        }>;
-      }) => data,
-    )
-    .handler(
-      async ({ data }) => {
-        /* -----------------------------------------
-           SERVER SUPABASE
-        ----------------------------------------- */
-
-        const SUPABASE_URL =
-          process.env
-            .SUPABASE_URL ||
-          import.meta.env
-            .VITE_SUPABASE_URL;
-
-        const SUPABASE_KEY =
-          process.env
-            .SUPABASE_SERVICE_ROLE_KEY;
-
-        if (
-          !SUPABASE_URL ||
-          !SUPABASE_KEY
-        ) {
-          throw new Error(
-            "Supabase environment variables are missing.",
-          );
-        }
-
-        const serverSupabase =
-          createClient(
-            SUPABASE_URL,
-            SUPABASE_KEY,
-            {
-              global: {
-                fetch: (
-                  input,
-                  init,
-                ) => {
-                  const headers =
-                    new Headers(
-                      typeof Request !==
-                        "undefined" &&
-                      input instanceof
-                        Request
-                        ? input.headers
-                        : undefined,
-                    );
-
-                  if (
-                    init?.headers
-                  ) {
-                    new Headers(
-                      init.headers,
-                    ).forEach(
-                      (
-                        value,
-                        key,
-                      ) =>
-                        headers.set(
-                          key,
-                          value,
-                        ),
-                    );
-                  }
-
-                  if (
-                    SUPABASE_KEY.startsWith(
-                      "sb_publishable_",
-                    ) &&
-                    headers.get(
-                      "Authorization",
-                    ) ===
-                      `Bearer ${SUPABASE_KEY}`
-                  ) {
-                    headers.delete(
-                      "Authorization",
-                    );
-                  }
-
-                  headers.set(
-                    "apikey",
-                    SUPABASE_KEY,
-                  );
-
-                  return fetch(
-                    input,
-                    {
-                      ...init,
-                      headers,
-                    },
-                  );
-                },
-              },
-
-              auth: {
-                persistSession:
-                  false,
-                autoRefreshToken:
-                  false,
-              },
-            },
-          );
-
-        /* -----------------------------------------
-           VALIDATION
-        ----------------------------------------- */
-
-        if (
-          !data.customer_name.trim()
-        ) {
-          throw new Error(
-            "Name is required.",
-          );
-        }
-
-        if (
-          !/^[0-9]{10}$/.test(
-            data.customer_phone,
-          )
-        ) {
-          throw new Error(
-            "Enter a valid 10-digit mobile number.",
-          );
-        }
-
-        if (!data.items.length) {
-          throw new Error(
-            "Your cart is empty.",
-          );
-        }
-
-        /* -----------------------------------------
-           ENQUIRY ITEMS
-        ----------------------------------------- */
-
-        const enquiryItems =
-          data.items.map(
-            (item) => ({
-              product_id:
-                item.product_id,
-
-              product_name:
-                item.product_name,
-
-              product_slug:
-                item.product_slug ??
-                null,
-
-              quantity:
-                item.quantity,
-
-              unit_price:
-                item.unit_price,
-
-              total_price:
-                item.total_price,
-
-              product_image:
-                item.product_image ??
-                null,
-
-              /*
-               * SAVE RING SIZE INSIDE cart_items JSON
-               */
-              ring_size:
-                item.ring_size ??
-                null,
-            }),
-          );
-
-        const {
-          data: enquiry,
-          error,
-        } =
-          await serverSupabase
-            .from("enquiries")
-            .insert({
-              customer_name:
-                data.customer_name.trim(),
-
-              customer_email:
-                data.customer_email
-                  ?.trim() ||
-                null,
-
-              phone:
-                data.customer_phone,
-
-              customer_address:
-                data.customer_address
-                  ?.trim() ||
-                null,
-
-              customer_city:
-                data.customer_city
-                  ?.trim() ||
-                null,
-
-              customer_state:
-                data.customer_state
-                  ?.trim() ||
-                null,
-
-              customer_pincode:
-                data.customer_pincode
-                  ?.trim() ||
-                null,
-
-              product_id:
-                data.items[0]
-                  ?.product_id ||
-                null,
-
-              product_name:
-                data.items.length ===
-                1
-                  ? data.items[0]
-                      .product_name
-                  : `${data.items.length} cart items`,
-
-              message:
-                data.message?.trim() ||
-                "Customer submitted an enquiry from cart.",
-
-              channel:
-                "website",
-
-              status:
-                "new",
-
-              /*
-               * ring_size is preserved
-               * inside cart_items JSON.
-               */
-              cart_items:
-                enquiryItems,
-            })
-            .select("id")
-            .single();
-
-        if (error) {
-          console.error(
-            "Enquiry creation failed:",
-            error,
-          );
-
-          throw new Error(
-            error.message,
-          );
-        }
-
-        return {
-          success: true,
-          enquiryId:
-            enquiry.id,
-        };
-      },
-    );
-
-/* =========================================================
-   CUSTOMER ORDER
-========================================================= */
-
-export const createCustomerOrder =
-  createServerFn({
-    method: "POST",
-  })
-    .validator(
-      (data: {
-        customer_name: string;
-        customer_email?: string;
-        customer_phone: string;
-
-        shipping_address: string;
-        shipping_city?: string;
-        shipping_state?: string;
-        shipping_pincode?: string;
-
-        subtotal: number;
-        shipping_charge: number;
-        discount: number;
-        total_amount: number;
-
-        payment_method: string;
-
-        coupon_code?: string;
-
-        items: Array<{
-          product_id: string;
-          product_name: string;
-          product_slug?: string;
-          quantity: number;
-          unit_price: number;
-          total_price: number;
-          product_image?: string;
-
-          /*
-           * Ring size selected by customer.
-           */
-          ring_size?: string | null;
-        }>;
-      }) => data,
-    )
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .handler(
-      async ({
-        data,
-        context,
-      }) => {
-        const {
-          supabase,
-        } = context;
-
-        /* =========================================
-           0. LOGGED-IN CUSTOMER ID
-        ========================================= */
-
-        const customerId =
-          context.userId;
-
-        if (!customerId) {
-          throw new Error(
-            "Unable to identify customer. Please login again.",
-          );
-        }
-
-        /* =========================================
-           1. BASIC VALIDATION
-        ========================================= */
-
-        if (
-          !data.customer_name.trim()
-        ) {
-          throw new Error(
-            "Name is required.",
-          );
-        }
-
-        if (
-          !/^[0-9]{10}$/.test(
-            data.customer_phone,
-          )
-        ) {
-          throw new Error(
-            "Enter a valid 10-digit mobile number.",
-          );
-        }
-
-        if (!data.items.length) {
-          throw new Error(
-            "Your cart is empty.",
-          );
-        }
-
-        /* =========================================
-           2. CUSTOMER PROFILE
-
-           IMPORTANT:
-           CustomerAuthPopup + Admin Customers
-           dono customer_profiles use karte hain.
-        ========================================= */
-
-        const {
-          error: profileError,
-        } = await supabase
-          .from(
-            "customer_profiles",
-          )
-          .upsert(
-            {
-              id: customerId,
-
-              full_name:
-                data.customer_name.trim(),
-
-              phone:
-                data.customer_phone.trim(),
-
-              email:
-                data.customer_email
-                  ?.trim()
-                  .toLowerCase() ||
-                null,
-
-              updated_at:
-                new Date().toISOString(),
-            },
-            {
-              onConflict:
-                "id",
-            },
-          );
-
-        if (profileError) {
-          console.error(
-            "Customer profile update failed:",
-            profileError,
-          );
-
-          // Profile failure ke bawajood order create hone denge.
-        }
-
-        /* =========================================
-           3. COUPON
-        ========================================= */
-
-        const couponCode =
-          data.coupon_code
-            ?.trim()
-            .toUpperCase() ||
-          null;
-
-        let couponDiscount = 0;
-
-        if (couponCode) {
-          const {
-            data: coupon,
-            error:
-              couponError,
-          } =
-            await supabase
-              .from("coupons")
-              .select("*")
-              .eq(
-                "code",
-                couponCode,
-              )
-              .eq(
-                "active",
-                true,
-              )
-              .maybeSingle();
-
-          if (couponError) {
-            console.error(
-              "Coupon lookup failed:",
-              couponError,
-            );
-
-            throw new Error(
-              "Unable to validate coupon.",
-            );
-          }
-
-          if (!coupon) {
-            throw new Error(
-              "Invalid or inactive coupon code.",
-            );
-          }
-
-          if (
-            coupon.min_order_value !=
-              null &&
-            Number(
-              data.subtotal,
-            ) <
-              Number(
-                coupon.min_order_value,
-              )
-          ) {
-            throw new Error(
-              `Minimum order value for this coupon is ₹${Number(
-                coupon.min_order_value,
-              ).toFixed(2)}.`,
-            );
-          }
-
-          if (
-            coupon.starts_at &&
-            new Date(
-              coupon.starts_at,
-            ).getTime() >
-              Date.now()
-          ) {
-            throw new Error(
-              "This coupon is not active yet.",
-            );
-          }
-
-          if (
-            coupon.expires_at &&
-            new Date(
-              coupon.expires_at,
-            ).getTime() <
-              Date.now()
-          ) {
-            throw new Error(
-              "This coupon has expired.",
-            );
-          }
-
-          if (
-            coupon.usage_limit !=
-              null &&
-            Number(
-              coupon.used_count ??
-                0,
-            ) >=
-              Number(
-                coupon.usage_limit,
-              )
-          ) {
-            throw new Error(
-              "This coupon has reached its usage limit.",
-            );
-          }
-
-          if (
-            coupon.discount_type ===
-            "percentage"
-          ) {
-            couponDiscount =
-              (Number(
-                data.subtotal,
-              ) *
-                Number(
-                  coupon.discount_value,
-                )) /
-              100;
-          } else {
-            couponDiscount =
-              Number(
-                coupon.discount_value,
-              );
-          }
-
-          if (
-            coupon.max_discount !=
-            null
-          ) {
-            couponDiscount =
-              Math.min(
-                couponDiscount,
-                Number(
-                  coupon.max_discount,
-                ),
-              );
-          }
-
-          couponDiscount =
-            Math.min(
-              couponDiscount,
-              Number(
-                data.subtotal,
-              ),
-            );
-
-          couponDiscount =
-            Math.round(
-              couponDiscount *
-                100,
-            ) / 100;
-        }
-
-        /* =========================================
-           4. FINAL TOTAL
-        ========================================= */
-
-        const subtotal =
+    const { error } = await context.supabase
+      .from("enquiries")
+      .update({
+        status: data.status,
+      })
+      .eq("id", data.id);
+
+    if (error) {
+      console.error("[adminUpdateEnquiry] error:", error);
+      throw new Error(error.message);
+    }
+
+    return { ok: true };
+  });
+
+  /* ------------ orders ------------ */
+
+export const getAdminOrders = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context);
+
+    const sb = context.supabase;
+
+    const { data: orders, error: ordersError } = await sb
+      .from("orders")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (ordersError) {
+      console.error("[getAdminOrders] orders error:", ordersError);
+      throw new Error(ordersError.message);
+    }
+
+    if (!orders || orders.length === 0) {
+      return { orders: [] };
+    }
+
+    const orderIds = orders.map((order) => order.id);
+
+    const { data: items, error: itemsError } = await sb
+      .from("order_items")
+      .select("*")
+      .in("order_id", orderIds);
+
+    if (itemsError) {
+      console.error("[getAdminOrders] order_items error:", itemsError);
+      throw new Error(itemsError.message);
+    }
+
+    const itemsByOrder = new Map<string, typeof items>();
+
+    for (const item of items ?? []) {
+      const existing = itemsByOrder.get(item.order_id) ?? [];
+      existing.push(item);
+      itemsByOrder.set(item.order_id, existing);
+    }
+
+    return {
+      orders: orders.map((order) => ({
+        ...order,
+        items: itemsByOrder.get(order.id) ?? [],
+      })),
+    };
+  });
+  /* ------------ admin enquiries ------------ */
+
+export const adminGetEnquiries = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context);
+
+    const { data, error } = await context.supabase
+      .from("enquiries")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("[adminGetEnquiries] error:", error);
+      throw new Error(`Unable to load enquiries: ${error.message}`);
+    }
+
+    // IMPORTANT: return array directly
+    return data ?? [];
+  });
+
+/* ------------ customers ------------ */
+
+export const getAdminCustomers = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context);
+
+    const sb = context.supabase;
+
+    // Get customers
+    const { data: customers, error: customersError } = await sb
+      .from("customer_profiles")
+      .select(
+        "id,full_name,phone,email,created_at,updated_at"
+      )
+      .order("created_at", { ascending: false });
+
+    if (customersError) {
+      console.error(
+        "[getAdminCustomers] customers error:",
+        customersError
+      );
+
+      throw new Error(
+        `Unable to load customers: ${customersError.message}`
+      );
+    }
+
+    const customerList = customers ?? [];
+
+    // Get all orders
+    const { data: orders, error: ordersError } = await sb
+      .from("orders")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (ordersError) {
+      console.error(
+        "[getAdminCustomers] orders error:",
+        ordersError
+      );
+
+      throw new Error(
+        `Unable to load customer orders: ${ordersError.message}`
+      );
+    }
+
+    const orderList = orders ?? [];
+
+    // Attach orders to customers
+    const ordersByCustomer = new Map<
+      string,
+      typeof orderList
+    >();
+
+    for (const order of orderList) {
+      const customerId =
+        order.customer_id ??
+        order.user_id ??
+        order.customer_profile_id;
+
+      if (!customerId) continue;
+
+      const existing =
+        ordersByCustomer.get(customerId) ?? [];
+
+      existing.push(order);
+      ordersByCustomer.set(customerId, existing);
+    }
+
+    return customerList.map((customer) => {
+      const customerOrders =
+        ordersByCustomer.get(customer.id) ?? [];
+
+      const paidOrders = customerOrders.filter(
+        (order) =>
+          String(order.payment_status ?? "").toLowerCase() ===
+            "paid" ||
+          String(order.status ?? "").toLowerCase() === "paid"
+      );
+
+      const totalSpent = paidOrders.reduce(
+        (sum, order) =>
+          sum +
           Number(
-            data.subtotal,
-          );
+            order.total_amount ??
+              order.total ??
+              order.amount ??
+              0
+          ),
+        0
+      );
 
-        const shippingCharge =
-          Number(
-            data.shipping_charge,
-          );
+      return {
+        ...customer,
 
-        const finalTotal =
-          Math.max(
-            0,
-            subtotal +
-              shippingCharge -
-              couponDiscount,
-          );
+        // IMPORTANT: frontend expects orders to always exist
+        orders: customerOrders,
 
-        /* =========================================
-           5. CREATE ORDER
-        ========================================= */
+        paidOrders,
 
-        const orderNumber =
-          `SRSJ-${Date.now()}`;
+        totalOrders: customerOrders.length,
 
-        const {
-          data: order,
-          error:
-            orderError,
-        } =
-          await supabase
-            .from("orders")
-            .insert({
-              /* CUSTOMER */
+        totalPaidOrders: paidOrders.length,
 
-              customer_id:
-                customerId,
-
-              user_id:
-                customerId,
-
-              customer_name:
-                data.customer_name.trim(),
-
-              customer_email:
-                data.customer_email
-                  ?.trim() ||
-                null,
-
-              customer_phone:
-                data.customer_phone.trim(),
-
-              /* ORDER */
-
-              order_number:
-                orderNumber,
-
-              shipping_address:
-                data.shipping_address,
-
-              shipping_city:
-                data.shipping_city ||
-                null,
-
-              shipping_state:
-                data.shipping_state ||
-                null,
-
-              shipping_pincode:
-                data.shipping_pincode ||
-                null,
-
-              /* AMOUNTS */
-
-              subtotal,
-
-              shipping_charge:
-                shippingCharge,
-
-              discount:
-                couponDiscount,
-
-              coupon_code:
-                couponCode,
-
-              coupon_discount:
-                couponDiscount,
-
-              total_amount:
-                finalTotal,
-
-              /* PAYMENT */
-
-              payment_method:
-                "razorpay",
-
-              payment_status:
-                "pending",
-
-              order_status:
-                "pending",
-            })
-            .select(
-              "id,order_number",
-            )
-            .single();
-
-        if (
-          orderError ||
-          !order
-        ) {
-          console.error(
-            "Order creation failed:",
-            orderError,
-          );
-
-          throw new Error(
-            "Unable to create order.",
-          );
-        }
-
-        /* =========================================
-           6. SAVE ORDER ITEMS
-
-           IMPORTANT DB SCHEMA:
-           total_price EXISTS
-           subtotal DOES NOT EXIST
-
-           RING SIZE:
-           order_items.ring_size
-        ========================================= */
-
-        const orderItems =
-          data.items.map(
-            (item) => ({
-              order_id:
-                order.id,
-
-              product_id:
-                item.product_id,
-
-              product_name:
-                item.product_name,
-
-              product_slug:
-                item.product_slug ??
-                null,
-
-              quantity:
-                Number(
-                  item.quantity,
-                ),
-
-              unit_price:
-                Number(
-                  item.unit_price,
-                ),
-
-              total_price:
-                Number(
-                  item.total_price,
-                ),
-
-              product_image:
-                item.product_image ??
-                null,
-
-              /*
-               * SAVE SELECTED RING SIZE
-               */
-              ring_size:
-                item.ring_size ??
-                null,
-            }),
-          );
-
-        const {
-          error:
-            itemsError,
-        } =
-          await supabase
-            .from(
-              "order_items",
-            )
-            .insert(
-              orderItems,
-            );
-
-        if (itemsError) {
-          console.error(
-            "Order items creation failed:",
-            itemsError,
-          );
-
-          /* Rollback */
-
-          await supabase
-            .from("orders")
-            .delete()
-            .eq(
-              "id",
-              order.id,
-            );
-
-          throw new Error(
-            "Unable to save order items.",
-          );
-        }
-
-        /* =========================================
-           7. RAZORPAY ENV
-        ========================================= */
-
-        const razorpayKeyId =
-          process.env
-            .RAZORPAY_KEY_ID;
-
-        const razorpayKeySecret =
-          process.env
-            .RAZORPAY_KEY_SECRET;
-
-        if (
-          !razorpayKeyId ||
-          !razorpayKeySecret
-        ) {
-          console.error(
-            "Razorpay environment variables are missing.",
-          );
-
-          throw new Error(
-            "Razorpay is not configured on the server.",
-          );
-        }
-
-        /* =========================================
-           8. RAZORPAY INSTANCE
-        ========================================= */
-
-        const razorpay =
-          new Razorpay({
-            key_id:
-              razorpayKeyId,
-
-            key_secret:
-              razorpayKeySecret,
-          });
-
-        /* =========================================
-           9. RAZORPAY ORDER
-        ========================================= */
-
-        const razorpayOrder =
-          await razorpay.orders.create(
-            {
-              amount:
-                Math.round(
-                  finalTotal *
-                    100,
-                ),
-
-              currency:
-                "INR",
-
-              receipt:
-                order.order_number,
-
-              notes: {
-                srsj_order_id:
-                  order.id,
-
-                order_number:
-                  order.order_number,
-
-                customer_id:
-                  customerId,
-
-                coupon_code:
-                  couponCode ||
-                  "NONE",
-
-                coupon_discount:
-                  couponDiscount.toFixed(
-                    2,
-                  ),
-              },
-            },
-          );
-
-        /* =========================================
-           10. SAVE RAZORPAY ORDER ID
-        ========================================= */
-
-        const {
-          error:
-            razorpaySaveError,
-        } =
-          await supabase
-            .from("orders")
-            .update({
-              razorpay_order_id:
-                razorpayOrder.id,
-            })
-            .eq(
-              "id",
-              order.id,
-            );
-
-        if (
-          razorpaySaveError
-        ) {
-          console.error(
-            "Failed to save Razorpay order ID:",
-            razorpaySaveError,
-          );
-
-          throw new Error(
-            "Unable to connect payment order.",
-          );
-        }
-
-        /* =========================================
-           11. RETURN CHECKOUT DATA
-        ========================================= */
-
-        return {
-          success: true,
-
-          orderId:
-            order.id,
-
-          orderNumber:
-            order.order_number,
-
-          razorpayOrderId:
-            razorpayOrder.id,
-
-          razorpayKeyId,
-
-          amount:
-            razorpayOrder.amount,
-
-          currency:
-            razorpayOrder.currency,
-
-          subtotal,
-
-          couponCode,
-
-          couponDiscount,
-
-          finalTotal,
-        };
-      },
-    );
-
-/* =========================================================
-   ADMIN ORDERS
-========================================================= */
-
-export const getAdminOrders =
-  createServerFn({
-    method: "GET",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .handler(
-      async ({
-        context,
-      }) => {
-        /* FIX:
-           assertAdmin(context)
-           NOT assertAdmin(context, context.userId)
-        */
-
-        await assertAdmin(context);
-
-        const {
-          data: orders,
-          error:
-            ordersError,
-        } =
-          await context.supabase
-            .from("orders")
-            .select(`
-              id,
-              order_number,
-              customer_id,
-              customer_name,
-              customer_email,
-              customer_phone,
-              shipping_address,
-              shipping_city,
-              shipping_state,
-              shipping_pincode,
-              subtotal,
-              shipping_charge,
-              discount,
-              coupon_discount,
-              total_amount,
-              coupon_code,
-              payment_method,
-              payment_status,
-              order_status,
-              razorpay_order_id,
-              razorpay_payment_id,
-              created_at
-            `)
-            .order(
-              "created_at",
-              {
-                ascending: false,
-              },
-            );
-
-        if (ordersError) {
-          console.error(
-            "Admin orders load failed:",
-            ordersError,
-          );
-
-          throw new Error(
-            "Unable to load orders.",
-          );
-        }
-
-        const orderRows =
-          orders ?? [];
-
-        const orderIds =
-          orderRows
-            .map(
-              (order: any) =>
-                order.id,
-            )
-            .filter(Boolean);
-
-        let itemRows: any[] =
-          [];
-
-        if (
-          orderIds.length >
-          0
-        ) {
-          const {
-            data: items,
-            error:
-              itemsError,
-          } =
-            await context.supabase
-              .from(
-                "order_items",
-              )
-              .select(`
-                id,
-                order_id,
-                product_id,
-                product_name,
-                product_slug,
-                quantity,
-                unit_price,
-                total_price,
-                product_image,
-
-                ring_size,
-
-                created_at
-              `)
-              .in(
-                "order_id",
-                orderIds,
-              )
-              .order(
-                "created_at",
-                {
-                  ascending: true,
-                },
-              );
-
-          if (itemsError) {
-            console.error(
-              "Admin order items load failed:",
-              itemsError,
-            );
-
-            throw new Error(
-              "Unable to load purchased products.",
-            );
-          }
-
-          itemRows =
-            items ?? [];
-        }
-
-        /* -----------------------------------------
-           GROUP ITEMS BY ORDER
-        ----------------------------------------- */
-
-        const itemsByOrder =
-          new Map<
-            string,
-            any[]
-          >();
-
-        for (
-          const item of itemRows
-        ) {
-          const list =
-            itemsByOrder.get(
-              item.order_id,
-            ) ?? [];
-
-          list.push(item);
-
-          itemsByOrder.set(
-            item.order_id,
-            list,
-          );
-        }
-
-        /* -----------------------------------------
-           FINAL ORDERS
-        ----------------------------------------- */
-
-        return {
-          orders:
-            orderRows.map(
-              (order: any) => ({
-                ...order,
-
-                items:
-                  itemsByOrder.get(
-                    order.id,
-                  ) ?? [],
-              }),
-            ),
-        };
-      },
-    );
-
-/* =========================================================
-   ADMIN CUSTOMERS
-========================================================= */
-
-export const getAdminCustomers =
-  createServerFn({
-    method: "GET",
-  })
-    .middleware([
-      requireSupabaseAuth,
-    ])
-    .handler(
-      async ({
-        context,
-      }) => {
-        /* FIX */
-
-        await assertAdmin(context);
-
-        const sb =
-          context.supabase;
-
-        /* -----------------------------------------
-           CUSTOMERS
-        ----------------------------------------- */
-
-        const {
-          data: customers,
-          error:
-            customersError,
-        } =
-          await sb
-            .from(
-              "customer_profiles",
-            )
-            .select(
-              "id,full_name,phone,email,created_at,updated_at",
-            )
-            .order(
-              "created_at",
-              {
-                ascending: false,
-              },
-            );
-
-        if (customersError) {
-          console.error(
-            "Admin customers load failed:",
-            customersError,
-          );
-
-          throw new Error(
-            "Unable to load customers.",
-          );
-        }
-
-        /* -----------------------------------------
-           ORDERS
-        ----------------------------------------- */
-
-        const {
-          data: orders,
-          error:
-            ordersError,
-        } =
-          await sb
-            .from("orders")
-            .select(
-              `
-                id,
-                order_number,
-                customer_id,
-                customer_name,
-                customer_email,
-                customer_phone,
-                total_amount,
-                payment_status,
-                order_status,
-                created_at
-              `,
-            )
-            .not(
-              "customer_id",
-              "is",
-              null,
-            )
-            .order(
-              "created_at",
-              {
-                ascending: false,
-              },
-            );
-
-        if (ordersError) {
-          console.error(
-            "Admin customer orders load failed:",
-            ordersError,
-          );
-
-          throw new Error(
-            "Unable to load customer orders.",
-          );
-        }
-
-        const orderRows =
-          orders ?? [];
-
-        const orderIds =
-          orderRows
-            .map(
-              (order: any) =>
-                order.id,
-            )
-            .filter(Boolean);
-
-        /* -----------------------------------------
-           ORDER ITEMS
-
-           IMPORTANT:
-           total_price
-           product_image
-           ring_size
-        ----------------------------------------- */
-
-        let orderItems: any[] =
-          [];
-
-        if (
-          orderIds.length >
-          0
-        ) {
-          const {
-            data,
-            error,
-          } =
-            await sb
-              .from(
-                "order_items",
-              )
-              .select(
-                `
-                  id,
-                  order_id,
-                  product_id,
-                  product_name,
-                  product_slug,
-                  quantity,
-                  unit_price,
-                  total_price,
-                  product_image,
-
-                  ring_size,
-
-                  created_at
-                `,
-              )
-              .in(
-                "order_id",
-                orderIds,
-              )
-              .order(
-                "created_at",
-                {
-                  ascending: true,
-                },
-              );
-
-          if (error) {
-            console.error(
-              "Admin customer order items load failed:",
-              error,
-            );
-
-            throw new Error(
-              "Unable to load customer order items.",
-            );
-          }
-
-          orderItems =
-            data ?? [];
-        }
-
-        /* -----------------------------------------
-           GROUP ITEMS BY ORDER
-        ----------------------------------------- */
-
-        const itemsByOrder =
-          new Map<
-            string,
-            any[]
-          >();
-
-        for (
-          const item of orderItems
-        ) {
-          const existing =
-            itemsByOrder.get(
-              item.order_id,
-            ) ?? [];
-
-          existing.push(item);
-
-          itemsByOrder.set(
-            item.order_id,
-            existing,
-          );
-        }
-
-        /* -----------------------------------------
-           ENRICH ORDERS
-        ----------------------------------------- */
-
-        const enrichedOrders =
-          orderRows.map(
-            (order: any) => ({
-              ...order,
-
-              items:
-                itemsByOrder.get(
-                  order.id,
-                ) ?? [],
-            }),
-          );
-
-        /* -----------------------------------------
-           GROUP ORDERS BY CUSTOMER
-        ----------------------------------------- */
-
-        const ordersByCustomer =
-          new Map<
-            string,
-            any[]
-          >();
-
-        for (
-          const order of enrichedOrders
-        ) {
-          if (
-            !order.customer_id
-          ) {
-            continue;
-          }
-
-          const existing =
-            ordersByCustomer.get(
-              order.customer_id,
-            ) ?? [];
-
-          existing.push(order);
-
-          ordersByCustomer.set(
-            order.customer_id,
-            existing,
-          );
-        }
-
-        /* -----------------------------------------
-           FINAL CUSTOMER DATA
-        ----------------------------------------- */
-
-        return (
-          customers ?? []
-        ).map(
-          (customer: any) => {
-            const customerOrders =
-              ordersByCustomer.get(
-                customer.id,
-              ) ?? [];
-
-            const paidOrders =
-              customerOrders.filter(
-                (order: any) =>
-                  String(
-                    order.payment_status,
-                  ).toLowerCase() ===
-                  "paid",
-              );
-
-            const totalSpent =
-              paidOrders.reduce(
-                (
-                  sum: number,
-                  order: any,
-                ) =>
-                  sum +
-                  Number(
-                    order.total_amount ??
-                      0,
-                  ),
-                0,
-              );
-
-            return {
-              id: customer.id,
-
-              full_name:
-                customer.full_name,
-
-              phone:
-                customer.phone,
-
-              email:
-                customer.email,
-
-              created_at:
-                customer.created_at,
-
-              updated_at:
-                customer.updated_at,
-
-              total_orders:
-                customerOrders.length,
-
-              paid_orders:
-                paidOrders.length,
-
-              total_spent:
-                totalSpent,
-
-              /* FULL ORDER HISTORY */
-
-              orders:
-                customerOrders,
-            };
-          },
-        );
-      },
-    );
-
-/* =========================================================
-   QUERY OPTIONS
-========================================================= */
-
-export const adminDashboardQuery =
-  queryOptions({
-    queryKey: [
-      "admin",
-      "dashboard",
-    ],
-
-    queryFn: () =>
-      getAdminDashboard(),
+        totalSpent,
+      };
+    });
   });
-
-export const adminLookupsQuery =
-  queryOptions({
-    queryKey: [
-      "admin",
-      "lookups",
-    ],
-
-    queryFn: () =>
-      adminGetLookups(),
-  });
-
-export const adminRatesQuery =
-  queryOptions({
-    queryKey: [
-      "admin",
-      "rates",
-    ],
-
-    queryFn: () =>
-      adminGetRates(),
-  });
-
-export const adminOffersQuery =
-  queryOptions({
-    queryKey: [
-      "admin",
-      "offers",
-    ],
-
-    queryFn: () =>
-      adminGetOffers(),
-  });
-
-export const adminReviewsQuery =
-  queryOptions({
-    queryKey: [
-      "admin",
-      "reviews",
-    ],
-
-    queryFn: () =>
-      adminGetReviews(),
-  });
-
-export const adminHomepageQuery =
-  queryOptions({
-    queryKey: [
-      "admin",
-      "homepage",
-    ],
-
-    queryFn: () =>
-      adminGetHomepage(),
-  });
-
-export const adminEnquiriesQuery =
-  queryOptions({
-    queryKey: [
-      "admin",
-      "enquiries",
-    ],
-
-    queryFn: () =>
-      adminGetEnquiries(),
-  });
-
-export const adminMediaQuery =
-  queryOptions({
-    queryKey: [
-      "admin",
-      "media",
-    ],
-
-    queryFn: () =>
-      adminListMedia({
-        data: {},
-      }),
-  });
-
-export const adminAdminsQuery =
-  queryOptions({
-    queryKey: [
-      "admin",
-      "admins",
-    ],
-
-    queryFn: () =>
-      adminGetAdmins(),
-  });
+/* ------------ query options ------------ */
+export const adminDashboardQuery = queryOptions({ queryKey: ["admin", "dashboard"], queryFn: () => getAdminDashboard() });
+export const adminLookupsQuery = queryOptions({ queryKey: ["admin", "lookups"], queryFn: () => adminGetLookups() });
+export const adminRatesQuery = queryOptions({ queryKey: ["admin", "rates"], queryFn: () => adminGetRates() });
+export const adminOffersQuery = queryOptions({ queryKey: ["admin", "offers"], queryFn: () => adminGetOffers() });
+export const adminReviewsQuery = queryOptions({ queryKey: ["admin", "reviews"], queryFn: () => adminGetReviews() });
+export const adminHomepageQuery = queryOptions({ queryKey: ["admin", "homepage"], queryFn: () => adminGetHomepage() });
+export const adminEnquiriesQuery = queryOptions({ queryKey: ["admin", "enquiries"], queryFn: () => adminGetEnquiries() });
+export const adminMediaQuery = queryOptions({ queryKey: ["admin", "media"], queryFn: () => adminListMedia({ data: {} }) });
+export const adminAdminsQuery = queryOptions({ queryKey: ["admin", "admins"], queryFn: () => adminGetAdmins() });

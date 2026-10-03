@@ -27,7 +27,9 @@ export const Route = createFileRoute("/api/public/media/$")({
           const v = upstream.headers.get(h);
           if (v) headers.set(h, v);
         }
-        headers.set("cache-control", "public, max-age=31536000, immutable");
+        headers.set("cache-control", "public, max-age=31536000, s-maxage=31536000, stale-while-revalidate=86400, immutable");
+        headers.set("cdn-cache-control", "public, max-age=31536000, stale-while-revalidate=86400");
+        if (range) headers.set("vary", "Range");
         return new Response(upstream.body, { status: upstream.status, headers });
       },
     },

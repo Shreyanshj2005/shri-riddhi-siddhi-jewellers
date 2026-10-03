@@ -51,6 +51,22 @@ type RazorpayOptions = {
   modal?: {
     ondismiss?: () => void;
   };
+
+  events?: {
+    "payment.failed"?: (response: {
+      error?: {
+        code?: string;
+        description?: string;
+        source?: string;
+        step?: string;
+        reason?: string;
+        metadata?: {
+          order_id?: string;
+          payment_id?: string;
+        };
+      };
+    }) => void;
+  };
 };
 
 type RazorpayInstance = {
@@ -540,11 +556,14 @@ function CheckoutPage() {
             );
 
             clearCart();
+            setLoading(false);
           } catch (error) {
             console.error(
               "Payment verification error:",
               error,
             );
+
+            setLoading(false);
 
             alert(
               error instanceof Error
@@ -560,8 +579,20 @@ function CheckoutPage() {
 
         modal: {
           ondismiss: () => {
+            setLoading(false);
             console.log(
               "Razorpay checkout closed.",
+            );
+          },
+        },
+
+        events: {
+          "payment.failed": (response) => {
+            console.error("Razorpay payment failed:", response);
+            setLoading(false);
+            alert(
+              response.error?.description ||
+                "Payment failed. Please try again.",
             );
           },
         },
@@ -577,20 +608,30 @@ function CheckoutPage() {
         );
 
       razorpay.open();
-    } catch (error) {
-      console.error(
-        "Checkout error:",
-        error,
-      );
+    } catch (error: any) {
+  console.error("Checkout error:", error);
 
-      alert(
-        error instanceof Error
-          ? error.message
-          : "Something went wrong during checkout.",
-      );
-    } finally {
-      setLoading(false);
-    }
+  try {
+    console.error(
+      "Checkout error JSON:",
+      JSON.stringify(error, Object.getOwnPropertyNames(error), 2),
+    );
+  } catch {
+    console.error("Checkout error could not be serialized:", error);
+  }
+
+  console.error("Checkout error message:", error?.message);
+  console.error("Checkout error cause:", error?.cause);
+
+  setLoading(false);
+
+  alert(
+    error?.message ||
+      "Something went wrong during checkout. Please try again.",
+  );
+}
+
+      
   };
 
   // -----------------------------------------

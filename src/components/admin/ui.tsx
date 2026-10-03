@@ -4,8 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-
-export { Input, Textarea };
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { adminUploadMedia } from "@/lib/admin.functions";
@@ -88,11 +86,46 @@ export function Spinner() {
   );
 }
 
-async function fileToBase64(file: File): Promise<string> {
+const MAX_IMAGE_DIMENSION = 1600;
+const WEBP_QUALITY = 0.78;
+
+async function fileToBase64(file: Blob): Promise<string> {
   const buf = new Uint8Array(await file.arrayBuffer());
   let binary = "";
   for (let i = 0; i < buf.length; i += 8192) binary += String.fromCharCode(...buf.subarray(i, i + 8192));
   return btoa(binary);
+}
+
+async function optimizeImage(file: File): Promise<{ file: Blob; fileName: string; contentType: string }> {
+  // Keep non-raster uploads (for example MP4/WebM hero videos) untouched.
+  if (!file.type.startsWith("image/") || file.type === "image/svg+xml" || file.type === "image/gif") {
+    return { file, fileName: file.name, contentType: file.type || "application/octet-stream" };
+  }
+
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(bitmap.width, bitmap.height));
+  const width = Math.max(1, Math.round(bitmap.width * scale));
+  const height = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    bitmap.close();
+    return { file, fileName: file.name, contentType: file.type || "application/octet-stream" };
+  }
+
+  ctx.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close();
+
+  const webp = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", WEBP_QUALITY));
+  if (webp && webp.size < file.size) {
+    const base = file.name.replace(/\.[^.]+$/, "");
+    return { file: webp, fileName: `${base}.webp`, contentType: "image/webp" };
+  }
+
+  // If WebP is not supported or would be larger, keep the original.
+  return { file, fileName: file.name, contentType: file.type || "application/octet-stream" };
 }
 
 export function UploadButton({ kind = "product", multiple = false, accept = "image/*", label = "Upload image", onUploaded }: {
@@ -116,9 +149,17 @@ export function UploadButton({ kind = "product", multiple = false, accept = "ima
           try {
             const out = [];
             for (const f of files) {
-              const base64 = await fileToBase64(f);
-              const res = await adminUploadMedia({ data: { fileName: f.name, contentType: f.type || "application/octet-stream", base64, kind } });
-              out.push({ ...res, name: f.name });
+              const optimized = await optimizeImage(f);
+              const base64 = await fileToBase64(optimized.file);
+              const res = await adminUploadMedia({
+                data: {
+                  fileName: optimized.fileName,
+                  contentType: optimized.contentType,
+                  base64,
+                  kind,
+                },
+              });
+              out.push({ ...res, name: optimized.fileName });
             }
             onUploaded(out);
             toast.success(`${out.length} file${out.length > 1 ? "s" : ""} uploaded`);
