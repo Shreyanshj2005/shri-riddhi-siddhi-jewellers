@@ -91,24 +91,29 @@ export const adminListProducts = createServerFn({ method: "POST" })
 
     let q = context.supabase
       .from("products")
-      .select(
-        `
-          id,
-          name,
-          slug,
-          sku,
-          price,
-          original_price,
-          status,
-          stock_status,
-          featured,
-          best_seller,
-          is_new,
-          updated_at,
-          deleted_at
-        `,
-        { count: "exact" }
-      )
+ .select(
+  `
+    id,
+    name,
+    slug,
+    sku,
+    price,
+    original_price,
+    status,
+    stock_status,
+    featured,
+    best_seller,
+    is_new,
+    updated_at,
+    deleted_at,
+    category:categories!products_category_id_fkey(
+      id,
+      name,
+      slug
+    )
+  `,
+  { count: "exact" }
+)
       .order("updated_at", { ascending: false })
       .range((page - 1) * size, page * size - 1);
 
