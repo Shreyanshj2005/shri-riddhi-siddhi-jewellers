@@ -1157,7 +1157,6 @@ export const adminGetEnquiries = createServerFn({ method: "GET" })
   });
 
 /* ------------ customers ------------ */
-
 export const getAdminCustomers = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
@@ -1165,8 +1164,13 @@ export const getAdminCustomers = createServerFn({ method: "GET" })
 
     const sb = context.supabase;
 
-    // Get customers
-    const { data: customers, error: customersError } = await sb
+    // -----------------------------------------
+    // Customers
+    // -----------------------------------------
+    const {
+      data: customers,
+      error: customersError,
+    } = await sb
       .from("customer_profiles")
       .select(
         "id,full_name,phone,email,created_at,updated_at"
@@ -1184,10 +1188,13 @@ export const getAdminCustomers = createServerFn({ method: "GET" })
       );
     }
 
-    const customerList = customers ?? [];
-
-    // Get all orders
-    const { data: orders, error: ordersError } = await sb
+    // -----------------------------------------
+    // Orders
+    // -----------------------------------------
+    const {
+      data: orders,
+      error: ordersError,
+    } = await sb
       .from("orders")
       .select("*")
       .order("created_at", { ascending: false });
@@ -1203,12 +1210,62 @@ export const getAdminCustomers = createServerFn({ method: "GET" })
       );
     }
 
+    const customerList = customers ?? [];
     const orderList = orders ?? [];
 
-    // Attach orders to customers
+    // -----------------------------------------
+    // Get order items
+    // -----------------------------------------
+    const orderIds = orderList.map((order) => order.id);
+
+    let orderItems: any[] = [];
+
+    if (orderIds.length > 0) {
+      const {
+        data: items,
+        error: itemsError,
+      } = await sb
+        .from("order_items")
+        .select("*")
+        .in("order_id", orderIds);
+
+      if (itemsError) {
+        console.error(
+          "[getAdminCustomers] order_items error:",
+          itemsError
+        );
+
+        throw new Error(
+          `Unable to load order items: ${itemsError.message}`
+        );
+      }
+
+      orderItems = items ?? [];
+    }
+
+    // -----------------------------------------
+    // Group items by order
+    // -----------------------------------------
+    const itemsByOrder = new Map<string, any[]>();
+
+    for (const item of orderItems) {
+      const existing =
+        itemsByOrder.get(item.order_id) ?? [];
+
+      existing.push(item);
+
+      itemsByOrder.set(
+        item.order_id,
+        existing
+      );
+    }
+
+    // -----------------------------------------
+    // Group orders by customer
+    // -----------------------------------------
     const ordersByCustomer = new Map<
       string,
-      typeof orderList
+      any[]
     >();
 
     for (const order of orderList) {
@@ -1222,46 +1279,71 @@ export const getAdminCustomers = createServerFn({ method: "GET" })
       const existing =
         ordersByCustomer.get(customerId) ?? [];
 
-      existing.push(order);
-      ordersByCustomer.set(customerId, existing);
+      existing.push({
+        ...order,
+        items:
+          itemsByOrder.get(order.id) ?? [],
+      });
+
+      ordersByCustomer.set(
+        customerId,
+        existing
+      );
     }
 
+    // -----------------------------------------
+    // Build customer response
+    // -----------------------------------------
     return customerList.map((customer) => {
       const customerOrders =
         ordersByCustomer.get(customer.id) ?? [];
 
-      const paidOrders = customerOrders.filter(
-        (order) =>
-          String(order.payment_status ?? "").toLowerCase() ===
-            "paid" ||
-          String(order.status ?? "").toLowerCase() === "paid"
-      );
+      // IMPORTANT:
+      // actual orders table uses payment_status
+      // and order_status
+const paidOrders = customerOrders.filter((order) => {
+  const paymentStatus = String(
+    order.payment_status ?? ""
+  )
+    .trim()
+    .toLowerCase();
 
-      const totalSpent = paidOrders.reduce(
-        (sum, order) =>
-          sum +
-          Number(
-            order.total_amount ??
-              order.total ??
-              order.amount ??
-              0
-          ),
+  return (
+    paymentStatus === "paid" ||
+    paymentStatus === "captured" ||
+    paymentStatus === "completed" ||
+    paymentStatus === "success" ||
+    paymentStatus === "successful"
+  );
+});
+
+const totalSpent = paidOrders.reduce(
+  (sum, order) => {
+    const amount = Number(
+      order.total_amount ??
+        order.total ??
+        order.amount ??
         0
-      );
+    );
 
+    return sum + (Number.isFinite(amount) ? amount : 0);
+  },
+  0
+);
       return {
         ...customer,
 
-        // IMPORTANT: frontend expects orders to always exist
+        // Frontend expects these exact names
         orders: customerOrders,
 
-        paidOrders,
+        total_orders:
+          customerOrders.length,
 
-        totalOrders: customerOrders.length,
+        paid_orders:
+          paidOrders.length,
 
-        totalPaidOrders: paidOrders.length,
-
-        totalSpent,
+        total_spent:
+          totalSpent,
       };
     });
   });
